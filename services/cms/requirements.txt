@@ -1,0 +1,3 @@
+nameko>=2.14.0
+marshmallow
+sqlalchemy
