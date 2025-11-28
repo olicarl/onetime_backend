@@ -6,6 +6,21 @@
 
 A scalable, modular backend for an EV Charging Station Management System (CSMS) built with the **Gateway Pattern**. This project implements the **OCPP 1.6 JSON** protocol, separating protocol handling from business logic to ensure high performance and maintainability.
 
+## 🎯 Purpose
+
+The goal of this project is to provide a **Home Assistant-style backend** for multi-family home parking lots where many charging stations are installed. It is designed to run on any Linux computer (e.g., Raspberry Pi) and focuses on simplicity, low resource usage, and ease of maintenance.
+
+**Key Advantages:**
+- **Offline Capability**: Not reliant on a stable internet connection for authentication or charging sessions.
+- **Cost-Effective**: No recurring costs; one-time hardware cost (e.g., Raspberry Pi).
+- **Easy Setup**: Simple one-time setup process.
+- **Simplified Security**: Operated behind a router, removing the need for complex security configurations.
+- **High Stability**: Optimized for typical installations of fewer than 300 charging points.
+- **Billing Integration**: Server can send invoices directly to tenants or forward 15-minute energy consumption intervals to ZEV billing solutions (Zusammenschluss zum Eigenverbrauch).
+
+**Target Audience:**
+- **Electricians & Installers**: Designed to be easily installed and commissioned by professionals without deep IT knowledge.
+
 ## 🚀 Features
 
 - **OCPP 1.6 JSON Support**: Full WebSocket handling using `mobilityhouse/ocpp`.
@@ -15,6 +30,9 @@ A scalable, modular backend for an EV Charging Station Management System (CSMS) 
 - **Event-Driven Architecture**: Uses **RabbitMQ** for async communication and **Nameko** for RPC.
 - **Dockerized**: Complete stack (Gateway, CMS, RabbitMQ, Postgres) ready to run with Docker Compose.
 - **Extensible**: Designed to be easily extended with new OCPP handlers and business rules.
+
+### Future Features
+- **Remote Access**: Home Assistant-style access over a server for remote setup and management.
 
 ## 🛠️ Tech Stack
 
