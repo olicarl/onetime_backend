@@ -7,6 +7,8 @@ from ocpp.v16.enums import Action, RegistrationStatus
 from ocpp.routing import on
 from app.config import settings, logger
 from app.services.events import event_bus, Events
+from app.services.station_service import station_service
+from app.services.authorization_service import authorization_service
 from app.services.transactions import transaction_service
 
 class ChargePoint(v16ChargePoint):
@@ -15,45 +17,47 @@ class ChargePoint(v16ChargePoint):
     async def on_boot_notification(self, charge_point_vendor: str, charge_point_model: str, **kwargs):
         logger.info(f"Received BootNotification from {self.id}")
         
-        # Direct Async Call
-        response = await transaction_service.process_boot(
+        response = await station_service.process_boot(
+            charger_id=self.id,
             vendor=charge_point_vendor,
             model=charge_point_model,
             **kwargs
         )
         
         return call_result.BootNotificationPayload(
-            current_time=datetime.utcnow().isoformat(),
+            current_time=response.get("current_time"),
             interval=response.get("interval", 300),
             status=response.get("status", RegistrationStatus.accepted)
         )
 
     @on(Action.MeterValues)
-    async def on_meter_values(self, **kwargs):
+    async def on_meter_values(self, connector_id: int = None, transaction_id: int = None, **kwargs):
         logger.info(f"Received MeterValues from {self.id}")
         
-        payload = {
-            "charger_id": self.id,
-            "payload": kwargs
-        }
-        
-        # Emit Event
-        event_bus.emit(Events.METER_VALUES, payload)
+        # Async background processing
+        await transaction_service.handle_meter_values(
+            charger_id=self.id,
+            payload={
+                "connector_id": connector_id,
+                "transaction_id": transaction_id,
+                "meter_value": kwargs.get("meter_value")
+            }
+        )
         
         return call_result.MeterValuesPayload()
         
     @on(Action.Authorize)
     async def on_authorize(self, id_tag: str, **kwargs):
         logger.info(f"Received Authorize for {id_tag} from {self.id}")
-        response = await transaction_service.authorize(id_tag=id_tag, **kwargs)
+        response = await authorization_service.authorize(id_tag=id_tag, **kwargs)
         return call_result.AuthorizePayload(
-            id_tag_info=response.get("id_tag_info", {"status": "Invalid"})
+            id_tag_info=response.get("id_tag_info")
         )
 
     @on(Action.Heartbeat)
     async def on_heartbeat(self, **kwargs):
         logger.info(f"Received Heartbeat from {self.id}")
-        response = await transaction_service.heartbeat(**kwargs)
+        response = await station_service.heartbeat(charger_id=self.id, **kwargs)
         return call_result.HeartbeatPayload(
             current_time=response.get("current_time", datetime.utcnow().isoformat())
         )
@@ -62,6 +66,7 @@ class ChargePoint(v16ChargePoint):
     async def on_start_transaction(self, connector_id: int, id_tag: str, meter_start: int, timestamp: str, **kwargs):
         logger.info(f"Received StartTransaction from {self.id}")
         response = await transaction_service.start_transaction(
+            charger_id=self.id,
             connector_id=connector_id,
             id_tag=id_tag,
             meter_start=meter_start,
@@ -70,13 +75,14 @@ class ChargePoint(v16ChargePoint):
         )
         return call_result.StartTransactionPayload(
             transaction_id=response.get("transaction_id", 0),
-            id_tag_info=response.get("id_tag_info", {"status": "Invalid"})
+            id_tag_info=response.get("id_tag_info")
         )
 
     @on(Action.StopTransaction)
     async def on_stop_transaction(self, meter_stop: int, timestamp: str, transaction_id: int, **kwargs):
         logger.info(f"Received StopTransaction from {self.id}")
         response = await transaction_service.stop_transaction(
+            charger_id=self.id,
             meter_stop=meter_stop,
             timestamp=timestamp,
             transaction_id=transaction_id,
@@ -89,14 +95,13 @@ class ChargePoint(v16ChargePoint):
     @on(Action.StatusNotification)
     async def on_status_notification(self, connector_id: int, error_code: str, status: str, **kwargs):
         logger.info(f"Received StatusNotification from {self.id}: {status}")
-        payload = {
-            "charger_id": self.id,
-            "connector_id": connector_id,
-            "error_code": error_code,
-            "status": status,
-            "payload": kwargs
-        }
-        event_bus.emit(Events.STATUS_NOTIFICATION, payload)
+        await station_service.handle_status_notification(
+            charger_id=self.id,
+            connector_id=connector_id,
+            status=status,
+            error_code=error_code,
+            **kwargs
+        )
         return call_result.StatusNotificationPayload()
 
     @on(Action.DataTransfer)
@@ -108,23 +113,133 @@ class ChargePoint(v16ChargePoint):
             data=response.get("data")
         )
 
-    # Simplified: No diagnostics/firmware handlers for now to keep it small, 
-    # but structure allows adding them easily with event_bus.emit
+    @on(Action.LogStatusNotification)
+    async def on_log_status_notification(self, status: str, request_id: int, **kwargs):
+        logger.info(f"Received LogStatusNotification from {self.id}: {status}")
+        await transaction_service.log_status_notification(status, request_id, **kwargs)
+        return call_result.LogStatusNotificationPayload()
 
+    @on(Action.SecurityEventNotification)
+    async def on_security_event_notification(self, type: str, timestamp: str, **kwargs):
+        logger.info(f"Received SecurityEventNotification from {self.id}: {type}")
+        await transaction_service.security_event_notification(type, timestamp, **kwargs)
+        return call_result.SecurityEventNotificationPayload()
+
+    @on(Action.SignCertificate)
+    async def on_sign_certificate(self, csr: str, **kwargs):
+        logger.info(f"Received SignCertificate from {self.id}")
+        response = await transaction_service.sign_certificate(csr, **kwargs)
+        return call_result.SignCertificatePayload(
+            status=response.get("status", "Accepted")
+        )
+
+    @on(Action.SignedFirmwareStatusNotification)
+    async def on_signed_firmware_status_notification(self, status: str, request_id: int, **kwargs):
+        logger.info(f"Received SignedFirmwareStatusNotification from {self.id}: {status}")
+        await transaction_service.signed_firmware_status_notification(status, request_id, **kwargs)
+        return call_result.SignedFirmwareStatusNotificationPayload()
+
+    # --- Outgoing Calls (Central System -> Charge Point) ---
+
+    async def remote_start_transaction(self, id_tag: str, connector_id: int = None, charging_profile: dict = None):
+        request = call.RemoteStartTransaction(id_tag=id_tag, connector_id=connector_id, charging_profile=charging_profile)
+        return await self.call(request)
+
+    async def remote_stop_transaction(self, transaction_id: int):
+        request = call.RemoteStopTransaction(transaction_id=transaction_id)
+        return await self.call(request)
+
+    async def reset(self, type: str):
+        request = call.Reset(type=type)
+        return await self.call(request)
+
+    async def unlock_connector(self, connector_id: int):
+        request = call.UnlockConnector(connector_id=connector_id)
+        return await self.call(request)
+
+    async def change_configuration(self, key: str, value: str):
+        request = call.ChangeConfiguration(key=key, value=value)
+        return await self.call(request)
+
+    async def get_configuration(self, keys: list = None):
+        request = call.GetConfiguration(key=keys)
+        return await self.call(request)
+
+    async def clear_cache(self):
+        request = call.ClearCache()
+        return await self.call(request)
+
+    async def change_availability(self, connector_id: int, type: str):
+        request = call.ChangeAvailability(connector_id=connector_id, type=type)
+        return await self.call(request)
+
+    async def get_diagnostics(self, location: str, **kwargs):
+        request = call.GetDiagnostics(location=location, **kwargs)
+        return await self.call(request)
+
+    async def update_firmware(self, location: str, retrieve_date: str, **kwargs):
+        request = call.UpdateFirmware(location=location, retrieve_date=retrieve_date, **kwargs)
+        return await self.call(request)
+
+    async def reserve_now(self, connector_id: int, expiry_date: str, id_tag: str, reservation_id: int, **kwargs):
+        request = call.ReserveNow(connector_id=connector_id, expiry_date=expiry_date, id_tag=id_tag, reservation_id=reservation_id, **kwargs)
+        return await self.call(request)
+
+    async def cancel_reservation(self, reservation_id: int):
+        request = call.CancelReservation(reservation_id=reservation_id)
+        return await self.call(request)
+
+    async def set_charging_profile(self, connector_id: int, cs_charging_profiles: dict):
+        request = call.SetChargingProfile(connector_id=connector_id, cs_charging_profiles=cs_charging_profiles)
+        return await self.call(request)
+
+    async def get_composite_schedule(self, connector_id: int, duration: int, **kwargs):
+        request = call.GetCompositeSchedule(connector_id=connector_id, duration=duration, **kwargs)
+        return await self.call(request)
+
+    async def clear_charging_profile(self, **kwargs):
+        request = call.ClearChargingProfile(**kwargs)
+        return await self.call(request)
+
+    async def trigger_message(self, requested_message: str, connector_id: int = None):
+        request = call.TriggerMessage(requested_message=requested_message, connector_id=connector_id)
+        return await self.call(request)
+
+    async def get_local_list_version(self):
+        request = call.GetLocalListVersion()
+        return await self.call(request)
+
+    async def send_local_list(self, list_version: int, update_type: str, local_authorization_list: list = None):
+        request = call.SendLocalList(list_version=list_version, update_type=update_type, local_authorization_list=local_authorization_list or [])
+        return await self.call(request)
+
+    # Generic Fallback
     async def send_admin_command(self, command_name: str, command_args: dict):
         """
         Generic handler to send any Chapter 5 command to the Charger.
         """
         try:
-            if not hasattr(call, command_name):
-                logger.error(f"Unknown command: {command_name}")
-                return {"status": "Rejected", "error": "Unknown command"}
-
-            command_class = getattr(call, command_name)
-            request = command_class(**command_args)
+            # Check if we have a specific method first (snake_case)
+            # e.g. RemoteStartTransaction -> remote_start_transaction
+            import re
+            method_name = re.sub(r'(?<!^)(?=[A-Z])', '_', command_name).lower()
             
-            logger.info(f"Sending {command_name} to {self.id}: {command_args}")
-            response = await self.call(request)
+            if hasattr(self, method_name):
+                method = getattr(self, method_name)
+                logger.info(f"Using specific method {method_name} for {command_name}")
+                response = await method(**command_args)
+            else: 
+                # Fallback to generic reflection
+                if not hasattr(call, command_name):
+                    logger.error(f"Unknown command: {command_name}")
+                    return {"status": "Rejected", "error": "Unknown command"}
+
+                command_class = getattr(call, command_name)
+                request = command_class(**command_args)
+                
+                logger.info(f"Sending {command_name} to {self.id}: {command_args}")
+                response = await self.call(request)
+            
             logger.info(f"Received response for {command_name} from {self.id}: {response}")
             
             # Convert response to dict
