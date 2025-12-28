@@ -1,20 +1,37 @@
-.PHONY: build up down test clean
+.PHONY: build up down test clean setup run db
 
-build:
-	docker-compose build
+# default target
+all: setup db run
 
-up:
-	docker-compose up -d
+setup:
+	@echo "Installing dependencies with uv..."
+	uv pip install -r requirements.txt
 
-down:
-	docker-compose down
+db:
+	@echo "Starting database..."
+	docker-compose up -d db
+	@echo "Waiting for DB..."
+	sleep 5
+
+migrate:
+	@echo "Running migrations..."
+	uv run alembic upgrade head
+
+run:
+	@echo "Starting local server..."
+	uv run uvicorn app.main:app --reload --port 8000
 
 test:
-	# We need to install test dependencies locally or run inside docker
-	# For simplicity, assuming local run if venv is active, or use docker
-	# This command runs the integration test against the running stack
-	python3 tests/integration/test_full_flow.py
+	@echo "Running integration test..."
+	uv run python tests/integration/test_full_flow.py
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+	rm -rf .venv
+
+build-docker:
+	docker-compose build
+
+up-docker:
+	docker-compose up -d
