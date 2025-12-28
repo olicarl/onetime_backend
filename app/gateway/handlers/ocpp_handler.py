@@ -13,7 +13,7 @@ from app.services.transactions import transaction_service
 
 class ChargePoint(v16ChargePoint):
     
-    @on(Action.BootNotification)
+    @on(Action.boot_notification)
     async def on_boot_notification(self, charge_point_vendor: str, charge_point_model: str, **kwargs):
         logger.info(f"Received BootNotification from {self.id}")
         
@@ -24,13 +24,13 @@ class ChargePoint(v16ChargePoint):
             **kwargs
         )
         
-        return call_result.BootNotificationPayload(
+        return call_result.BootNotification(
             current_time=response.get("current_time"),
             interval=response.get("interval", 300),
             status=response.get("status", RegistrationStatus.accepted)
         )
 
-    @on(Action.MeterValues)
+    @on(Action.meter_values)
     async def on_meter_values(self, connector_id: int = None, transaction_id: int = None, **kwargs):
         logger.info(f"Received MeterValues from {self.id}")
         
@@ -44,25 +44,25 @@ class ChargePoint(v16ChargePoint):
             }
         )
         
-        return call_result.MeterValuesPayload()
+        return call_result.MeterValues()
         
-    @on(Action.Authorize)
+    @on(Action.authorize)
     async def on_authorize(self, id_tag: str, **kwargs):
         logger.info(f"Received Authorize for {id_tag} from {self.id}")
         response = await authorization_service.authorize(id_tag=id_tag, **kwargs)
-        return call_result.AuthorizePayload(
+        return call_result.Authorize(
             id_tag_info=response.get("id_tag_info")
         )
 
-    @on(Action.Heartbeat)
+    @on(Action.heartbeat)
     async def on_heartbeat(self, **kwargs):
         logger.info(f"Received Heartbeat from {self.id}")
         response = await station_service.heartbeat(charger_id=self.id, **kwargs)
-        return call_result.HeartbeatPayload(
+        return call_result.Heartbeat(
             current_time=response.get("current_time", datetime.utcnow().isoformat())
         )
 
-    @on(Action.StartTransaction)
+    @on(Action.start_transaction)
     async def on_start_transaction(self, connector_id: int, id_tag: str, meter_start: int, timestamp: str, **kwargs):
         logger.info(f"Received StartTransaction from {self.id}")
         response = await transaction_service.start_transaction(
@@ -73,12 +73,12 @@ class ChargePoint(v16ChargePoint):
             timestamp=timestamp,
             **kwargs
         )
-        return call_result.StartTransactionPayload(
+        return call_result.StartTransaction(
             transaction_id=response.get("transaction_id", 0),
             id_tag_info=response.get("id_tag_info")
         )
 
-    @on(Action.StopTransaction)
+    @on(Action.stop_transaction)
     async def on_stop_transaction(self, meter_stop: int, timestamp: str, transaction_id: int, **kwargs):
         logger.info(f"Received StopTransaction from {self.id}")
         response = await transaction_service.stop_transaction(
@@ -88,11 +88,11 @@ class ChargePoint(v16ChargePoint):
             transaction_id=transaction_id,
             **kwargs
         )
-        return call_result.StopTransactionPayload(
+        return call_result.StopTransaction(
             id_tag_info=response.get("id_tag_info")
         )
 
-    @on(Action.StatusNotification)
+    @on(Action.status_notification)
     async def on_status_notification(self, connector_id: int, error_code: str, status: str, **kwargs):
         logger.info(f"Received StatusNotification from {self.id}: {status}")
         await station_service.handle_status_notification(
@@ -102,42 +102,42 @@ class ChargePoint(v16ChargePoint):
             error_code=error_code,
             **kwargs
         )
-        return call_result.StatusNotificationPayload()
+        return call_result.StatusNotification()
 
-    @on(Action.DataTransfer)
+    @on(Action.data_transfer)
     async def on_data_transfer(self, vendor_id: str, **kwargs):
         logger.info(f"Received DataTransfer from {self.id}")
         response = await transaction_service.data_transfer(vendor_id=vendor_id, **kwargs)
-        return call_result.DataTransferPayload(
+        return call_result.DataTransfer(
             status=response.get("status", "Rejected"),
             data=response.get("data")
         )
 
-    @on(Action.LogStatusNotification)
+    @on(Action.log_status_notification)
     async def on_log_status_notification(self, status: str, request_id: int, **kwargs):
         logger.info(f"Received LogStatusNotification from {self.id}: {status}")
         await transaction_service.log_status_notification(status, request_id, **kwargs)
-        return call_result.LogStatusNotificationPayload()
+        return call_result.LogStatusNotification()
 
-    @on(Action.SecurityEventNotification)
+    @on(Action.security_event_notification)
     async def on_security_event_notification(self, type: str, timestamp: str, **kwargs):
         logger.info(f"Received SecurityEventNotification from {self.id}: {type}")
         await transaction_service.security_event_notification(type, timestamp, **kwargs)
-        return call_result.SecurityEventNotificationPayload()
+        return call_result.SecurityEventNotification()
 
-    @on(Action.SignCertificate)
+    @on(Action.sign_certificate)
     async def on_sign_certificate(self, csr: str, **kwargs):
         logger.info(f"Received SignCertificate from {self.id}")
         response = await transaction_service.sign_certificate(csr, **kwargs)
-        return call_result.SignCertificatePayload(
+        return call_result.SignCertificate(
             status=response.get("status", "Accepted")
         )
 
-    @on(Action.SignedFirmwareStatusNotification)
+    @on(Action.signed_firmware_status_notification)
     async def on_signed_firmware_status_notification(self, status: str, request_id: int, **kwargs):
         logger.info(f"Received SignedFirmwareStatusNotification from {self.id}: {status}")
         await transaction_service.signed_firmware_status_notification(status, request_id, **kwargs)
-        return call_result.SignedFirmwareStatusNotificationPayload()
+        return call_result.SignedFirmwareStatusNotification()
 
     # --- Outgoing Calls (Central System -> Charge Point) ---
 

@@ -16,11 +16,21 @@ async def startup():
 from app.gateway.routers import web
 app.include_router(web.router)
 
+class SocketAdapter:
+    def __init__(self, websocket: WebSocket):
+        self._ws = websocket
+
+    async def recv(self):
+        return await self._ws.receive_text()
+
+    async def send(self, msg):
+        await self._ws.send_text(msg)
+
 @app.websocket("/ocpp/{charge_point_id}")
 async def on_connect(websocket: WebSocket, charge_point_id: str):
     await manager.connect(charge_point_id, websocket)
     
-    cp = ChargePoint(charge_point_id, websocket)
+    cp = ChargePoint(charge_point_id, SocketAdapter(websocket))
     
     # Store the ChargePoint instance on the WebSocket object 
     # so we can retrieve it for outgoing commands (Rule C implementation)

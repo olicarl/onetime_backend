@@ -1,6 +1,6 @@
-import asyncio
 import logging
 import websockets
+import asyncio
 from datetime import datetime
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call
@@ -83,7 +83,40 @@ class SimulatedChargePoint(cp):
         logger.info(f"StopTransaction: {response}")
         return response
 
+from app.database import SessionLocal
+from app.models import Renter, AuthorizationToken, AuthorizationStatus
+from datetime import datetime, timedelta
+
+def setup_database():
+    db = SessionLocal()
+    try:
+        # Check if exists
+        token = db.query(AuthorizationToken).filter(AuthorizationToken.token == "DEADBEEF").first()
+        if not token:
+            # Create Renter
+            renter = Renter(name="Test User", contact_email="test@example.com")
+            db.add(renter)
+            db.commit()
+            
+            # Create Token
+            token = AuthorizationToken(
+                token="DEADBEEF",
+                renter_id=renter.id,
+                status=AuthorizationStatus.Accepted,
+                expiry_date=datetime.utcnow() + timedelta(days=365)
+            )
+            db.add(token)
+            db.commit()
+            logger.info("Seeded database with token DEADBEEF")
+    except Exception as e:
+        logger.error(f"Error seeding DB: {e}")
+    finally:
+        db.close()
+
 async def run_test_flow():
+    # Ensure DB has data
+    setup_database()
+
     # URL should match the backend config
     server_url = "ws://localhost:8000/ocpp/CP_TEST_001" 
     
