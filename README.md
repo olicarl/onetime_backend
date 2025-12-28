@@ -1,8 +1,9 @@
 # Onetime Backend (OCPP 1.6 CSMS)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/compose/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![uv](https://img.shields.io/badge/managed%20by-uv-purple)](https://github.com/astral-sh/uv)
+[![Docker](https://img.shields.io/badge/docker%20compose-v2-blue.svg)](https://docs.docker.com/compose/)
 
 A scalable, modular backend for an EV Charging Station Management System (CSMS) built with a **Simplified Monolithic Architecture**. This project implements the **OCPP 1.6 JSON** protocol, designed for reliability and ease of deployment.
 
@@ -17,61 +18,69 @@ The goal of this project is to provide a **Home Assistant-style backend** for mu
 - **Easy Setup**: Simple one-time setup process.
 - **Simplified Security**: Operated behind a router, removing the need for complex security configurations.
 - **High Stability**: Optimized for typical installations of fewer than 200 charging points.
-- **Billing Integration**: Server can send invoices directly to tenants or forward 15-minute energy consumption intervals to ZEV billing solutions (Zusammenschluss zum Eigenverbrauch).
+- **Billing Integration**: Server can send invoices directly to tenants or forward 15-minute energy consumption intervals to ZEV billing solutions.
 
 **Target Audience:**
 
-- **Electricians & Installers**: Designed to be easily installed and commissioned by professionals without deep IT knowledge.
+- **Electricians & Installers**: Designed to be installed and commissioned by professionals without deep IT knowledge.
 
 ## 🚀 Features
 
 - **OCPP 1.6 JSON Support**: Full WebSocket handling using `mobilityhouse/ocpp`.
 - **Monolithic Architecture**:
   - **Single Process**: Runs as a single, lightweight FastAPI application.
-  - **In-Memory Event Bus**: Decoupled internal communication using `pyee` instead of complex message brokers.
+  - **In-Memory Event Bus**: Decoupled internal communication using `pyee`.
+- **Modern Tooling**:
+  - **Dependency Management**: Uses `uv` for ultra-fast package management.
+  - **Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations.
 - **Simplicity**: No RabbitMQ or microservices overhead. Just Docker + Postgres.
-- **Dockerized**: specific container for the application and database.
 - **Extensible**: Modular logic layer for adding new features easily.
 
 ### Future Features
 
-- **Remote Access**: Home Assistant-style access over a server for remote setup and management.
+- **Remote Access**: Home Assistant-style access for remote setup and management.
 
 ## 🛠️ Tech Stack
 
-- **Language**: Python 3.10+
+- **Language**: Python 3.11+
 - **Frameworks**:
   - [FastAPI](https://fastapi.tiangolo.com/) (WebSockets & API)
   - [SQLAlchemy](https://www.sqlalchemy.org/) (ORM)
+  - [Alembic](https://alembic.sqlalchemy.org/) (Migrations)
 - **Protocol**: [OCPP 1.6](https://github.com/mobilityhouse/ocpp)
-- **Event Bus**: [pyee](https://github.com/jfhbrook/pyee) (Internal Events)
+- **Event Bus**: [pyee](https://github.com/jfhbrook/pyee)
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
-- **Infrastructure**: Docker, Docker Compose
+- **Infrastructure**: Docker, Docker Compose (v2)
+- **Package Manager**: [uv](https://github.com/astral-sh/uv)
 
 ## 📂 Project Structure
 
 ```text
 onetime_backend/
 ├── app/
-│   ├── gateway/            # Protocol Handling (WebSockets)
-│   ├── services/           # Business Logic (Transactions, Auth)
+│   ├── gateway/            # Protocol Handling (WebSockets & Handlers)
+│   ├── services/           # Business Logic (Station, Auth, Transaction)
 │   ├── main.py             # Application Entrypoint
-│   └── models.py           # Database Models
+│   ├── models.py           # Database Models
+│   └── database.py         # DB Connection & Session
+├── alembic/                # Database Migrations
 ├── tests/                  # Integration and Unit Tests
-├── docker-compose.yml      # Infrastructure
-├── Makefile                # Shortcut commands
-└── architecture.md         # Detailed System Design
+├── docker-compose.yml      # Infrastructure (PostgreSQL)
+├── Makefile                # Shortcut commands for local dev
+├── pyproject.toml          # Python dependencies
+└── README.md               # Project Documentation
 ```
 
 ## 🏁 Getting Started
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Python 3.10+](https://www.python.org/) (for local development/testing)
-- [Make](https://www.gnu.org/software/make/) (optional, but recommended)
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) (v2)
+- [uv](https://github.com/astral-sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
-### Installation
+### Local Development Setup
+
+We use `make` and `uv` to streamline the development workflow.
 
 1. **Clone the repository**
 
@@ -80,35 +89,56 @@ onetime_backend/
     cd onetime_backend
     ```
 
-2. **Start the infrastructure**
+2. **Setup Environment**
+
+    Creates a virtual environment and installs dependencies.
 
     ```bash
-    make up
-    # OR
-    docker-compose up -d
+    make setup
     ```
 
-3. **Check logs**
+3. **Start Database**
+
+    Starts the PostgreSQL container on port **5433** (to avoid conflicts).
 
     ```bash
-    docker-compose logs -f
+    make db
     ```
+
+4. **Run Migrations**
+
+    Applies the database schema.
+
+    ```bash
+    make migrate
+    ```
+
+    *Tip: To create a new migration after changing models, use `make generate-migration`.*
+
+5. **Run the Server**
+
+    Starts the FastAPI backend locally with hot-reload.
+
+    ```bash
+    make run
+    ```
+
+    The server will be available at `http://127.0.0.1:8000`.
 
 ### Running Tests
 
-To verify the system is working correctly, run the integration tests. These simulate a Charging Station connecting to the Gateway and performing a full boot flow.
+To verify the system is working correctly, run the integration tests. These simulate a Charging Station connecting to the Gateway and performing a full boot, auth, and transaction flow.
 
-```bash
-make test
-# OR
-python3 tests/integration/test_full_flow.py
-```
+1. Ensure the server is running (`make run`) in one terminal.
+2. In a separate terminal, run:
+
+    ```bash
+    make test
+    ```
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! Whether it's fixing bugs, adding new OCPP features, or improving documentation, your help is appreciated.
-
-### How to Contribute
+We welcome contributions!
 
 1. **Fork the Project**
 2. **Create your Feature Branch** (`git checkout -b feature/AmazingFeature`)
@@ -118,9 +148,9 @@ We welcome contributions from the community! Whether it's fixing bugs, adding ne
 
 ### Development Guidelines
 
-- **Code Style**: Please follow PEP 8 guidelines.
-- **Testing**: Ensure you add tests for any new features. Run `make test` before submitting.
-- **Documentation**: Update `architecture.md` or this `README.md` if you change architectural details.
+- **Code Style**: Follow PEP 8.
+- **Testing**: Run `make test` before submitting.
+- **Dependencies**: Add new packages using `uv add <package>` and update `requirements.txt` if needed.
 
 ## 📄 License
 
