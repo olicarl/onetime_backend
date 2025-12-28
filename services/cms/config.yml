@@ -1,4 +1,0 @@
-AMQP_URI: 'amqp://guest:guest@rabbitmq:5672/'
-WEB_SERVER_ADDRESS: '0.0.0.0:8000'
-rpc_exchange: 'nameko-rpc'
-serializer: 'json'

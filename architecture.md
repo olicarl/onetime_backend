@@ -1,96 +1,115 @@
-# System Architecture & Data Flow
+# System Architecture: The Event-Driven Monolith
 
-This document details the architecture of the OCPP Backend, focusing on the data flow for incoming messages (Charger to System) and outgoing commands (System to Charger).
+This document details the new simplified architecture for the **Onetime Backend**. The system is designed as a **Modular Monolith** that runs as a single process but maintains loose coupling through an internal **In-Memory Event Bus**.
 
-## 1. Incoming Flow: Charger → Database
-**Scenario:** A Charging Station sends a `BootNotification` or `MeterValues`.
+> **Design Goal**: Simplicity and stability for deployments of < 200 stations, running on low-cost hardware (e.g., Raspberry Pi).
+
+## 1. High-Level Overview
+
+We have removed distributed components (RabbitMQ, Nameko) in favor of Python's `asyncio` capabilities and an internal event loop.
 
 ```mermaid
-sequenceDiagram
-    participant C as Charger
-    participant G as Gateway (FastAPI)
-    participant L as OCPP Lib (mobilityhouse)
-    participant P as Proxy (aio_nameko_proxy)
-    participant RMQ as RabbitMQ
-    participant CMS as CMS Service (Nameko)
-    participant DB as Database (Postgres)
-
-    C->>G: WebSocket Frame (JSON)
-    Note over G: gateway/main.py
-    G->>L: Pass to ChargePoint instance
-    Note over L: gateway/handlers/ocpp_handler.py
-    L->>L: Validate & Route (@on handler)
-    
-    alt RPC Call (e.g., BootNotification)
-        L->>P: await rpc.cms_service.process_boot()
-        P->>RMQ: Publish to 'rpc-cms_service' queue
-        RMQ->>CMS: Deliver Message
-        Note over CMS: services/cms/service.py
-        CMS->>CMS: Execute process_boot()
-        CMS->>DB: Read/Write (via Logic/Models)
-        DB-->>CMS: Result
-        CMS-->>RMQ: Return Result
-        RMQ-->>P: Return Result
-        P-->>L: Return Dict
-        L-->>C: Send CallResult (WebSocket)
-    else Event (e.g., MeterValues)
-        L->>RMQ: Publish to 'cms.events' (Topic)
-        Note over L: _send_event()
-        RMQ->>CMS: Deliver to @event_handler
-        CMS->>DB: Save Data
-    end
+graph LR
+    CS[Charging Station] -- WebSocket (OCPP) --> GW_API[FastAPI Gateway]
+    GW_API -- 1. Emit Event --> BUS((Event Bus))
+    BUS -- 2. Trigger --> SVC[Transaction Service]
+    SVC -- 3. SQL --> DB[(Postgres)]
 ```
 
-### Detailed Steps
-1.  **The Wire**: The Charger sends a WebSocket frame to the **Gateway**.
-2.  **The Translator**: The `mobilityhouse/ocpp` library inside the Gateway validates the message and routes it to the specific handler (e.g., `on_boot_notification`).
-3.  **The Bridge**: The handler uses `aio_nameko_proxy` to make an RPC call to the **CMS Service** (for critical operations) or publishes an event to **RabbitMQ** (for data logging).
-4.  **The Brain**: The **CMS Service** (Nameko) receives the request.
-    *   **RPC**: It processes the logic, interacts with the **Database**, and returns a plain dictionary response.
-    *   **Event**: It consumes the message asynchronously and persists data to the **Database**.
-5.  **The Response**: For RPC calls, the result travels back through RabbitMQ to the Gateway, where the library wraps it in a standard OCPP response and sends it back to the Charger.
+### Components
+
+1. **FastAPI Gateway**: Handles WebSocket connections and HTTP APIs.
+2. **Event Bus (`pyee`)**: A lightweight in-memory pub/sub mechanism.
+3. **Services**: Logic modules (Transaction, Auth, Config) that subscribe to the Event Bus and interact with the Database.
+4. **Database**: PostgreSQL for persistent storage.
 
 ---
 
-## 2. Outgoing Flow: Frontend → Charger
-**Scenario:** An Admin clicks "Remote Start" on the Dashboard.
+## 2. Incoming Flow: Charger → System
+
+**Scenario**: A Charger sends `MeterValues`.
 
 ```mermaid
 sequenceDiagram
-    participant U as User (Browser)
-    participant G_API as Gateway API
-    participant CMS as CMS Service
-    participant PUB as CommandPublisher
-    participant RMQ as RabbitMQ
-    participant G_W as Gateway Worker
     participant C as Charger
+    participant H as OCPP Handler
+    participant B as EventBus
+    participant S as TransactionService
+    participant DB as Database
 
-    U->>G_API: HTTP POST /api/remote-start
-    Note over G_API: Or direct RPC to CMS
-    G_API->>CMS: RPC trigger_remote_start()
-    Note over CMS: services/cms/service.py
-    CMS->>PUB: Publish Command
-    Note over PUB: services/cms/dependencies.py
-    PUB->>RMQ: Publish to 'gateway_commands' (cmd.{charger_id})
+    C->>H: WebSocket: MeterValues(measurands=...)
+    Note over H: gateway/handlers.py
+    H->>H: Validate Schema
+    H->>B: emit('meter_values', payload)
+    H-->>C: Immediate Response (Conf)
     
-    RMQ->>G_W: Deliver to Consumer
-    Note over G_W: gateway/main.py
-    G_W->>G_W: Lookup WebSocket in Registry
-    G_W->>C: Send Call (RemoteStartTransaction)
-    
-    C-->>G_W: Send CallResult
-    G_W->>G_W: Log Result / Notify System
+    Note over B: Async Dispatch
+    B->>S: trigger on_meter_values(payload)
+    Note over S: services/transactions.py
+    S->>DB: INSERT INTO meter_readings...
 ```
 
-### Detailed Steps
-1.  **The Trigger**: The Frontend (or API client) initiates an action (e.g., calling a CMS RPC method like `trigger_remote_start`).
-2.  **The Command**: The **CMS Service** executes the trigger logic. Instead of talking to the charger directly (which it can't), it uses the `CommandPublisher` dependency.
-3.  **The Transport**: The Publisher sends a message to the `gateway_commands` exchange in **RabbitMQ** with a routing key targeting the specific charger (e.g., `cmd.1234`).
-4.  **The Routing**: RabbitMQ routes the message to the **Gateway** instance that is subscribed to that topic.
-5.  **The Execution**:
-    *   The **Gateway** consumes the message.
-    *   It looks up the active WebSocket connection for `charger_id` in its `ConnectionRegistry`.
-    *   It retrieves the `ChargePoint` instance.
-    *   It calls the generic `send_admin_command` method.
-6.  **The Wire**: The `mobilityhouse/ocpp` library constructs the OCPP message and sends it over the WebSocket to the **Charger**.
-7.  **The Feedback**: The Charger responds, and the Gateway logs the result (or could publish it back to a response queue).
+### Key Benefits
+
+- **Non-Blocking**: The WebSocket handler responds to the charger immediately after emitting the event. Database writes happen asynchronously.
+- **Decoupled**: The `OCPP Handler` doesn't know about the `TransactionService`. It just announces "Hey, I got meter values!".
+
+---
+
+## 3. Outgoing Flow: System → Charger
+
+**Scenario**: An Admin clicks "Remote Start" in the dashboard.
+
+```mermaid
+sequenceDiagram
+    participant A as Admin (API)
+    participant S as CommandService
+    participant CM as ConnectionManager
+    participant C as Charger
+
+    A->>S: POST /api/remote-start/{id}
+    S->>CM: get_connection(charger_id)
+    alt Connection Found
+        CM->>C: Send RemoteStartTransaction
+        C-->>CM: Result: Accepted
+        CM-->>S: Return Success
+        S-->>A: 200 OK
+    else Not Found
+        S-->>A: 404 Offline
+    end
+```
+
+### Direct Access
+
+Since everything runs in one process, the API can directly access the `ConnectionManager` (Singleton) to find the active WebSocket and send data. No external message queue is needed to route the command.
+
+---
+
+## 4. Technology Stack
+
+- **Language**: Python 3.10+
+- **Web Framework**: `FastAPI` (WebSockets & HTTP)
+- **OCPP Library**: `mobilityhouse/ocpp`
+- **Event Bus**: `pyee` (AsyncIO EventEmitter)
+- **Database**: `PostgreSQL` (+ `SQLAlchemy` / `Alembic`)
+- **Runtime**: Single Docker Container
+
+## 5. Directory Structure Plan
+
+```text
+onetime_backend/
+├── app/
+│   ├── gateway/
+│   │   ├── connection_manager.py  # WebSocket Registry
+│   │   └── ocpp_handler.py        # Protocol Translator
+│   ├── services/
+│   │   ├── events.py              # The shared EventBus instance
+│   │   ├── transactions.py        # Logic: Start/Stop/MeterValues
+│   │   └── auth.py                # Logic: Authorize tags
+│   ├── main.py                    # Entrypoint (FastAPI app)
+│   └── models.py                  # Database Models
+├── migrations/                    # Alembic Migrations
+├── tests/
+├── Dockerfile
+└── docker-compose.yml
+```

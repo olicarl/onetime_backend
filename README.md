@@ -4,61 +4,63 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/compose/)
 
-A scalable, modular backend for an EV Charging Station Management System (CSMS) built with the **Gateway Pattern**. This project implements the **OCPP 1.6 JSON** protocol, separating protocol handling from business logic to ensure high performance and maintainability.
+A scalable, modular backend for an EV Charging Station Management System (CSMS) built with a **Simplified Monolithic Architecture**. This project implements the **OCPP 1.6 JSON** protocol, designed for reliability and ease of deployment.
 
 ## 🎯 Purpose
 
 The goal of this project is to provide a **Home Assistant-style backend** for multi-family home parking lots where many charging stations are installed. It is designed to run on any Linux computer (e.g., Raspberry Pi) and focuses on simplicity, low resource usage, and ease of maintenance.
 
 **Key Advantages:**
+
 - **Offline Capability**: Not reliant on a stable internet connection for authentication or charging sessions.
 - **Cost-Effective**: No recurring costs; one-time hardware cost (e.g., Raspberry Pi).
 - **Easy Setup**: Simple one-time setup process.
 - **Simplified Security**: Operated behind a router, removing the need for complex security configurations.
-- **High Stability**: Optimized for typical installations of fewer than 300 charging points.
+- **High Stability**: Optimized for typical installations of fewer than 200 charging points.
 - **Billing Integration**: Server can send invoices directly to tenants or forward 15-minute energy consumption intervals to ZEV billing solutions (Zusammenschluss zum Eigenverbrauch).
 
 **Target Audience:**
+
 - **Electricians & Installers**: Designed to be easily installed and commissioned by professionals without deep IT knowledge.
 
 ## 🚀 Features
 
 - **OCPP 1.6 JSON Support**: Full WebSocket handling using `mobilityhouse/ocpp`.
-- **Gateway Pattern**:
-  - **Gateway Service**: Stateless (mostly), handles WebSockets, translates OCPP to internal RPC/Events.
-  - **CMS Service**: Pure business logic, handles database interactions.
-- **Event-Driven Architecture**: Uses **RabbitMQ** for async communication and **Nameko** for RPC.
-- **Dockerized**: Complete stack (Gateway, CMS, RabbitMQ, Postgres) ready to run with Docker Compose.
-- **Extensible**: Designed to be easily extended with new OCPP handlers and business rules.
+- **Monolithic Architecture**:
+  - **Single Process**: Runs as a single, lightweight FastAPI application.
+  - **In-Memory Event Bus**: Decoupled internal communication using `pyee` instead of complex message brokers.
+- **Simplicity**: No RabbitMQ or microservices overhead. Just Docker + Postgres.
+- **Dockerized**: specific container for the application and database.
+- **Extensible**: Modular logic layer for adding new features easily.
 
 ### Future Features
+
 - **Remote Access**: Home Assistant-style access over a server for remote setup and management.
 
 ## 🛠️ Tech Stack
 
 - **Language**: Python 3.10+
 - **Frameworks**:
-  - [FastAPI](https://fastapi.tiangolo.com/) (Gateway)
-  - [Nameko](https://nameko.readthedocs.io/) (Microservices/RPC)
+  - [FastAPI](https://fastapi.tiangolo.com/) (WebSockets & API)
+  - [SQLAlchemy](https://www.sqlalchemy.org/) (ORM)
 - **Protocol**: [OCPP 1.6](https://github.com/mobilityhouse/ocpp)
-- **Message Broker**: [RabbitMQ](https://www.rabbitmq.com/)
+- **Event Bus**: [pyee](https://github.com/jfhbrook/pyee) (Internal Events)
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
 - **Infrastructure**: Docker, Docker Compose
 
 ## 📂 Project Structure
 
-```
+```text
 onetime_backend/
-├── gateway/                # FastAPI Gateway Service
-│   ├── handlers/           # OCPP Message Handlers
-│   ├── routers/            # HTTP Routes
-│   └── main.py             # Entrypoint
-├── services/
-│   └── cms/                # Nameko CMS Service (Business Logic)
+├── app/
+│   ├── gateway/            # Protocol Handling (WebSockets)
+│   ├── services/           # Business Logic (Transactions, Auth)
+│   ├── main.py             # Application Entrypoint
+│   └── models.py           # Database Models
 ├── tests/                  # Integration and Unit Tests
-├── docker-compose.yml      # Container Orchestration
+├── docker-compose.yml      # Infrastructure
 ├── Makefile                # Shortcut commands
-└── BOILERPLATE_GUIDE.md    # Detailed Implementation Guide
+└── architecture.md         # Detailed System Design
 ```
 
 ## 🏁 Getting Started
@@ -71,20 +73,23 @@ onetime_backend/
 
 ### Installation
 
-1.  **Clone the repository**
+1. **Clone the repository**
+
     ```bash
     git clone https://github.com/yourusername/onetime_backend.git
     cd onetime_backend
     ```
 
-2.  **Start the infrastructure**
+2. **Start the infrastructure**
+
     ```bash
     make up
     # OR
     docker-compose up -d
     ```
 
-3.  **Check logs**
+3. **Check logs**
+
     ```bash
     docker-compose logs -f
     ```
@@ -105,21 +110,17 @@ We welcome contributions from the community! Whether it's fixing bugs, adding ne
 
 ### How to Contribute
 
-1.  **Fork the Project**
-2.  **Create your Feature Branch** (`git checkout -b feature/AmazingFeature`)
-3.  **Commit your Changes** (`git commit -m 'Add some AmazingFeature'`)
-4.  **Push to the Branch** (`git push origin feature/AmazingFeature`)
-5.  **Open a Pull Request**
+1. **Fork the Project**
+2. **Create your Feature Branch** (`git checkout -b feature/AmazingFeature`)
+3. **Commit your Changes** (`git commit -m 'Add some AmazingFeature'`)
+4. **Push to the Branch** (`git push origin feature/AmazingFeature`)
+5. **Open a Pull Request**
 
 ### Development Guidelines
 
 - **Code Style**: Please follow PEP 8 guidelines.
 - **Testing**: Ensure you add tests for any new features. Run `make test` before submitting.
-- **Documentation**: Update `BOILERPLATE_GUIDE.md` or this `README.md` if you change architectural details.
-
-### Roadmap
-
-See [BOILERPLATE_GUIDE.md](BOILERPLATE_GUIDE.md) for a detailed roadmap of what's implemented and what's next (e.g., Database integration, Authorization, Remote Commands).
+- **Documentation**: Update `architecture.md` or this `README.md` if you change architectural details.
 
 ## 📄 License
 

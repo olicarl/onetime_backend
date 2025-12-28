@@ -2,6 +2,8 @@ fastapi>=0.100.0
 uvicorn[standard]
 websockets
 ocpp>=0.15.0
-aio-nameko-proxy
-aio_pika
+sqlalchemy
 jinja2
+psycopg2-binary
+pyee
+asyncio

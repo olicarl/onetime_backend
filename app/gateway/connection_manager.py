@@ -1,6 +1,6 @@
 from typing import Dict
 from fastapi import WebSocket
-from gateway.core.config import logger
+from app.config import logger
 
 class ConnectionRegistry:
     _instance = None
@@ -24,4 +24,4 @@ class ConnectionRegistry:
     def get_connection(self, charger_id: str) -> WebSocket:
         return self.active_connections.get(charger_id)
 
-connection_registry = ConnectionRegistry()
+manager = ConnectionRegistry()
