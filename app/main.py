@@ -1,20 +1,31 @@
-import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from starlette.middleware.cors import CORSMiddleware
 from app.config import logger
 from app.gateway.connection_manager import manager
 from app.gateway.handlers.ocpp_handler import ChargePoint
 from app.services.transactions import transaction_service # Import to register event listeners
+from app.middleware.auth import DualModeAuthMiddleware
+from app.routers import auth
 
 app = FastAPI(title="Onetime Backend", version="2.0.0")
+
+# Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For dev, restrict in prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(DualModeAuthMiddleware)
 
 @app.on_event("startup")
 async def startup():
     logger.info("Starting Onetime Backend (Monolith)...")
     logger.info("Event listeners registered via imports.")
 
-# Include Dashboard
-from app.gateway.routers import web
-app.include_router(web.router)
+# Routes
+app.include_router(auth.router)
 
 class SocketAdapter:
     def __init__(self, websocket: WebSocket):
