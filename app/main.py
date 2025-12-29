@@ -5,7 +5,7 @@ from app.gateway.connection_manager import manager
 from app.gateway.handlers.ocpp_handler import ChargePoint
 from app.services.transactions import transaction_service # Import to register event listeners
 from app.middleware.auth import DualModeAuthMiddleware
-from app.routers import auth
+from app.routers import auth, admin
 
 app = FastAPI(title="Onetime Backend", version="2.0.0")
 
@@ -26,6 +26,7 @@ async def startup():
 
 # Routes
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 class SocketAdapter:
     def __init__(self, websocket: WebSocket):
