@@ -26,13 +26,26 @@ interface Charger {
 export default function Dashboard() {
     const [chargers, setChargers] = useState<Charger[]>([]);
     const [loading, setLoading] = useState(true);
+    const [serverIp, setServerIp] = useState<string>(window.location.hostname);
 
     useEffect(() => {
         fetchChargers();
+        fetchSystemInfo();
         // Poll every 10 seconds
         const interval = setInterval(fetchChargers, 10000);
         return () => clearInterval(interval);
     }, []);
+
+    const fetchSystemInfo = async () => {
+        try {
+            const res = await axios.get("/api/admin/system-info");
+            if (res.data.ip_address) {
+                setServerIp(res.data.ip_address);
+            }
+        } catch (error) {
+            console.error("Failed to fetch system info", error);
+        }
+    };
 
     const fetchChargers = async () => {
         try {
@@ -52,6 +65,27 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-8">
                     <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                 </div>
+
+                <Card className="mb-8 border-l-4 border-l-blue-500 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            Installer Configuration
+                        </CardTitle>
+                        <CardDescription>
+                            Use the following WebSocket URL to connect new charging stations.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-4 p-4 bg-muted rounded-md border">
+                            <code className="flex-1 font-mono text-sm">
+                                ws://{serverIp}:8000/ocpp/&lt;CHARGE_POINT_ID&gt;
+                            </code>
+                            <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                                WebSocket URL
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 <Card>
                     <CardHeader>

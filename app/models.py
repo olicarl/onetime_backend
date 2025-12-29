@@ -22,6 +22,7 @@ class ChargingStationStatus(str, enum.Enum):
     Reserved = "Reserved"
     Unavailable = "Unavailable"
     Faulted = "Faulted"
+    Unknown = "Unknown"
 
 # Models
 

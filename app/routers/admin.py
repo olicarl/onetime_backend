@@ -89,3 +89,19 @@ def get_chargers(db: Session = Depends(get_db)):
         ))
         
     return result
+
+@router.get("/system-info")
+def get_system_info():
+    import socket
+    try:
+        # Connect to a public DNS server to find the local IP used for routing
+        # This doesn't actually send data
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+    
+    return {"ip_address": local_ip}

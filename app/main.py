@@ -23,6 +23,9 @@ app.add_middleware(DualModeAuthMiddleware)
 async def startup():
     logger.info("Starting Onetime Backend (Monolith)...")
     logger.info("Event listeners registered via imports.")
+    
+    from app.services.watchdog import watchdog
+    watchdog.start()
 
 # Routes
 app.include_router(auth.router)
@@ -51,7 +54,7 @@ async def on_connect(websocket: WebSocket, charge_point_id: str):
     try:
         await cp.start()
     except WebSocketDisconnect:
-        manager.disconnect(charge_point_id)
+        await manager.disconnect(charge_point_id)
     except Exception as e:
         logger.error(f"Error in OCPP connection: {e}")
-        manager.disconnect(charge_point_id)
+        await manager.disconnect(charge_point_id)

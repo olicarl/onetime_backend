@@ -2,6 +2,8 @@ from typing import Dict
 from fastapi import WebSocket
 from app.config import logger
 
+from app.services.station_service import station_service
+
 class ConnectionRegistry:
     _instance = None
 
@@ -15,11 +17,13 @@ class ConnectionRegistry:
         await websocket.accept()
         self.active_connections[charger_id] = websocket
         logger.info(f"Charger {charger_id} connected. Total: {len(self.active_connections)}")
+        await station_service.set_station_online(charger_id)
 
-    def disconnect(self, charger_id: str):
+    async def disconnect(self, charger_id: str):
         if charger_id in self.active_connections:
             del self.active_connections[charger_id]
             logger.info(f"Charger {charger_id} disconnected. Total: {len(self.active_connections)}")
+        await station_service.set_station_offline(charger_id)
 
     def get_connection(self, charger_id: str) -> WebSocket:
         return self.active_connections.get(charger_id)
