@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import LoginPage from "@/pages/LoginPage";
 import Dashboard from "@/pages/Dashboard";
+import ChargerDetail from "@/pages/ChargerDetail";
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
 
@@ -36,6 +37,14 @@ function App() {
             element={
               <PrivateRoute>
                 <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/chargers/:id"
+            element={
+              <PrivateRoute>
+                <ChargerDetail />
               </PrivateRoute>
             }
           />

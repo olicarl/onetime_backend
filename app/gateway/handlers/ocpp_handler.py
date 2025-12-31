@@ -10,9 +10,70 @@ from app.services.events import event_bus, Events
 from app.services.station_service import station_service
 from app.services.authorization_service import authorization_service
 from app.services.transactions import transaction_service
+from app.services.logging_service import logging_service
 
 class ChargePoint(v16ChargePoint):
     
+    async def route_message(self, raw_msg):
+        try:
+            msg = json.loads(raw_msg)
+            msg_type = msg[0]
+            action = "Unknown"
+            payload = {}
+            type_str = "UNKNOWN"
+            
+            if msg_type == 2: # CALL
+                type_str = "CALL"
+                action = msg[2]
+                payload = msg[3]
+            elif msg_type == 3: # CALLRESULT
+                type_str = "CALLRESULT"
+                action = "Response" 
+                payload = msg[2]
+            elif msg_type == 4: # CALLERROR
+                type_str = "CALLERROR"
+                action = "Error"
+                payload = {"code": msg[2], "description": msg[3], "details": msg[4]}
+                
+            await logging_service.log_message(
+                station_id=self.id,
+                direction="Incoming",
+                message_type=type_str,
+                action=action,
+                payload=payload
+            )
+        except Exception as e:
+            logger.error(f"Error logging incoming message: {e}")
+            
+        await super().route_message(raw_msg)
+
+    async def call(self, payload, suppress=False):
+        try:
+            # payload is the Request object e.g. Call(unique_id, action, payload)
+            # Actually ocpp lib 'call' takes the *Operation* object (e.g. RemoteStartTransaction), 
+            # and wraps it in a Call object internally. 
+            # Wait, looking at ocpp lib:
+            # await self.call(call.RemoteStartTransaction(...))
+            # The argument 'payload' IS the operation object (which has 'action' attribute)
+            
+            action = getattr(payload, 'action', 'Unknown')
+            # Extract data
+            data = {}
+            if hasattr(payload, '__dict__'):
+                 data = {k: v for k, v in payload.__dict__.items() if not k.startswith('_')}
+            
+            await logging_service.log_message(
+                station_id=self.id,
+                direction="Outgoing",
+                message_type="CALL",
+                action=action,
+                payload=data
+            )
+        except Exception as e:
+            logger.error(f"Error logging outgoing message: {e}")
+            
+        return await super().call(payload, suppress)
+
     @on(Action.boot_notification)
     async def on_boot_notification(self, charge_point_vendor: str, charge_point_model: str, **kwargs):
         logger.info(f"Received BootNotification from {self.id}")

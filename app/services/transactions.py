@@ -43,6 +43,7 @@ class TransactionService:
                 token_id=id_tag,
                 # generate a random int for unique constraints if needed, or use DB ID after flush
                 transaction_id=0, # Placeholder, will update after flush if possible or use sequence
+                connector_id=connector_id,
                 start_time=ts,
                 meter_start=meter_start,
                 total_energy_kwh=0.0

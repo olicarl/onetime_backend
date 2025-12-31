@@ -6,14 +6,7 @@ from app.security import create_access_token
 
 router = APIRouter(prefix="/api", tags=["Auth"])
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class UserResponse(BaseModel):
-    username: str
-    role: str
-    mode: str
+from app.schemas import LoginRequest, UserResponse
 
 @router.post("/login")
 async def login(response: Response, creds: LoginRequest):

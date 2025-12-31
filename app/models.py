@@ -78,6 +78,7 @@ class ChargingStation(Base):
     connectors = relationship("StationConnector", back_populates="station")
     configurations = relationship("StationConfiguration", back_populates="station")
     boot_logs = relationship("BootLog", back_populates="station")
+    ocpp_logs = relationship("OcppMessageLog", back_populates="station")
 
 
 class AuthorizationToken(Base):
@@ -99,6 +100,7 @@ class ChargingSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     transaction_id = Column(Integer, unique=True, nullable=False, index=True)
     station_id = Column(String, ForeignKey("charging_stations.id"), nullable=False)
+    connector_id = Column(Integer, nullable=True) # Added for tracking which connector
     token_id = Column(String, ForeignKey("authorization_tokens.token"), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
@@ -162,3 +164,18 @@ class BootLog(Base):
     ip_address = Column(String, nullable=True)
 
     station = relationship("ChargingStation", back_populates="boot_logs")
+
+
+class OcppMessageLog(Base):
+    __tablename__ = "ocpp_message_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    station_id = Column(String, ForeignKey("charging_stations.id"), nullable=False)
+    message_type = Column(String, nullable=False) # e.g. CALL, CALLRESULT, CALLERROR
+    action = Column(String, nullable=False) # e.g. BootNotification
+    direction = Column(String, nullable=False) # Incoming, Outgoing
+    payload = Column(JSON, nullable=True) # The JSON payload
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    station = relationship("ChargingStation", back_populates="ocpp_logs")
+

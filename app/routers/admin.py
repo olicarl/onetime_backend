@@ -4,26 +4,19 @@ from app.database import SessionLocal
 from app.models import ChargingStation, ChargingStationStatus, ChargingSession
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
-class ConnectorStatus(BaseModel):
-    connector_id: int
-    status: ChargingStationStatus
-
-class ActiveSessionRef(BaseModel):
-    transaction_id: int
-    renter_name: str
-    energy_consumed: int # Wh
-
-class ChargerDashboardItem(BaseModel):
-    id: str
-    vendor: str | None
-    model: str | None
-    is_online: bool
-    parking_spot_label: str | None
-    connectors: List[ConnectorStatus]
-    active_session: Optional[ActiveSessionRef] = None
+from app.schemas import (
+    ConnectorStatus, 
+    ChargerDashboardItem, 
+    ChargerDetail, 
+    SessionLogItem, 
+    OcppLogItem, 
+    MeterReadingItem,
+    ActiveSessionRef
+)
 
 def get_db():
     db = SessionLocal()
@@ -105,3 +98,141 @@ def get_system_info():
         local_ip = "127.0.0.1"
     
     return {"ip_address": local_ip}
+
+# --- Charger Details ---
+
+
+
+@router.get("/chargers/{charger_id}", response_model=ChargerDetail)
+def get_charger_detail(charger_id: str, db: Session = Depends(get_db)):
+    c = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Charger not found")
+        
+    # Find active sessions for this station
+    active_sessions = (
+        db.query(ChargingSession)
+        .filter(
+            ChargingSession.station_id == charger_id, 
+            ChargingSession.end_time.is_(None)
+        )
+        .all()
+    )
+    # Map connector_id -> transaction_id
+    active_map = {}
+    for s in active_sessions:
+        if s.connector_id is not None:
+             active_map[s.connector_id] = s.transaction_id
+        
+    connectors_data = []
+    for conn in c.connectors:
+        tx_id = active_map.get(conn.connector_id)
+        connectors_data.append(ConnectorStatus(
+            connector_id=conn.connector_id, 
+            status=conn.status,
+            current_transaction_id=tx_id
+        ))
+    
+    spot_label = c.parking_spot.label if c.parking_spot else None
+    
+    return ChargerDetail(
+        id=c.id,
+        vendor=c.vendor,
+        model=c.model,
+        firmware_version=c.firmware_version,
+        is_online=c.is_online,
+        last_heartbeat=c.last_heartbeat,
+        parking_spot_label=spot_label,
+        connectors=connectors_data
+    )
+
+
+
+@router.get("/chargers/{charger_id}/sessions", response_model=List[SessionLogItem])
+def get_charger_sessions(charger_id: str, db: Session = Depends(get_db)):
+    sessions = (
+        db.query(ChargingSession)
+        .filter(ChargingSession.station_id == charger_id)
+        .order_by(ChargingSession.start_time.desc())
+        .limit(50)
+        .all()
+    )
+    
+    result = []
+    for s in sessions:
+        # Calculate total energy if not stored (optional fallback)
+        total = s.total_energy_kwh
+        if total is None and s.meter_stop and s.meter_start:
+             total = (s.meter_stop - s.meter_start) / 1000.0
+             
+        result.append(SessionLogItem(
+            id=s.id,
+            transaction_id=s.transaction_id,
+            start_time=s.start_time,
+            end_time=s.end_time,
+            meter_start=s.meter_start,
+            meter_stop=s.meter_stop,
+            total_energy=total,
+            stop_reason=s.stop_reason,
+            id_tag=s.token_id
+        ))
+    return result
+
+
+
+@router.get("/chargers/{charger_id}/logs", response_model=List[OcppLogItem])
+def get_charger_logs(charger_id: str, db: Session = Depends(get_db)):
+    # Import here to avoid circular dependencies if any, 
+    # though models are in same file usually.
+    from app.models import OcppMessageLog
+    
+    logs = (
+        db.query(OcppMessageLog)
+        .filter(OcppMessageLog.station_id == charger_id)
+        .order_by(OcppMessageLog.timestamp.desc())
+        .limit(100)
+        .all()
+    )
+    
+    return [
+        OcppLogItem(
+            id=l.id,
+            timestamp=l.timestamp,
+            direction=l.direction,
+            message_type=l.message_type,
+            action=l.action,
+            payload=l.payload
+        )
+        for l in logs
+    ]
+
+# Session details (Graph data)
+
+
+@router.get("/sessions/{transaction_id}/readings", response_model=List[MeterReadingItem])
+def get_session_readings(transaction_id: int, db: Session = Depends(get_db)):
+    from app.models import MeterReading
+    
+    readings = (
+        db.query(MeterReading)
+        .filter(MeterReading.transaction_id == transaction_id)
+        .order_by(MeterReading.timestamp.asc())
+        .all()
+    )
+    
+    clean_readings = []
+    for r in readings:
+        try:
+            val = float(r.value)
+            clean_readings.append(MeterReadingItem(
+                timestamp=r.timestamp,
+                value=val,
+                unit=r.unit,
+                measurand=r.measurand,
+                phase=r.phase,
+                context=r.context
+            ))
+        except:
+            pass
+            
+    return clean_readings

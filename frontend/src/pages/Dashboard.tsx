@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/sidebar";
+import { useNavigate } from "react-router-dom";
 import {
     Table,
     TableBody,
@@ -27,6 +28,7 @@ export default function Dashboard() {
     const [chargers, setChargers] = useState<Charger[]>([]);
     const [loading, setLoading] = useState(true);
     const [serverIp, setServerIp] = useState<string>(window.location.hostname);
+    const navigate = useNavigate();
 
     useEffect(() => {
         fetchChargers();
@@ -63,7 +65,7 @@ export default function Dashboard() {
             <Sidebar />
             <main className="flex-1 p-8 bg-gray-50 dark:bg-gray-900">
                 <div className="flex items-center justify-between mb-8">
-                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                    <h2 className="text-3xl font-bold tracking-tight">Chargers</h2>
                 </div>
 
                 <Card className="mb-8 border-l-4 border-l-blue-500 shadow-sm">
@@ -111,7 +113,11 @@ export default function Dashboard() {
                                 </TableHeader>
                                 <TableBody>
                                     {chargers.map((c) => (
-                                        <TableRow key={c.id}>
+                                        <TableRow
+                                            key={c.id}
+                                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                            onClick={() => navigate(`/chargers/${c.id}`)}
+                                        >
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     {c.is_online ? <Power className="h-4 w-4 text-green-500" /> : <PowerOff className="h-4 w-4 text-gray-400" />}
