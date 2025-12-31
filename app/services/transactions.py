@@ -153,4 +153,45 @@ class TransactionService:
         finally:
             db.close()
 
+    async def data_transfer(self, vendor_id: str, message_id: str = None, data: str = None, **kwargs):
+        """
+        Handle DataTransfer.
+        """
+        logger.info(f"DataTransfer: vendor_id={vendor_id}, message_id={message_id}, data={data}")
+        # Simplistic acceptance for EVerest specific polling
+        if vendor_id == "org.openchargealliance.iso15118pnc":
+             return {"status": "Accepted", "data": "{}"}
+        
+        return {"status": "Accepted", "data": None}
+
+    async def security_event_notification(self, type: str, timestamp: str, tech_info: str = None, **kwargs):
+        """
+        Handle SecurityEventNotification.
+        """
+        logger.info(f"SecurityEvent: {type} at {timestamp}. Info: {tech_info}")
+        # Just log for now
+        pass
+
+    async def log_status_notification(self, status: str, request_id: int, **kwargs):
+         """
+         Handle LogStatusNotification.
+         """
+         logger.info(f"LogStatus: {status} for Request {request_id}")
+         pass
+
+    async def sign_certificate(self, csr: str, **kwargs):
+        """
+        Handle SignCertificate.
+        """
+        logger.info(f"SignCertificate received for CSR length: {len(csr)}")
+        # Mock response
+        return {"status": "Accepted"}
+
+    async def signed_firmware_status_notification(self, status: str, request_id: int, **kwargs):
+        """
+        Handle SignedFirmwareStatusNotification.
+        """
+        logger.info(f"SignedFirmwareStatus: {status} for Request {request_id}")
+        pass
+
 transaction_service = TransactionService()

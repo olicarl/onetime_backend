@@ -136,6 +136,44 @@ To verify the system is working correctly, run the integration tests. These simu
     make test
     ```
 
+## 🧪 Testing Environments
+
+This project comes with **two pre-configured charging station simulators** to help you test different scenarios and charger behaviors.
+
+### 1. MicroOcpp Simulator (Lightweight)
+
+A lightweight, web-based simulator perfect for quick testing of basic OCPP flows (Boot, Auth, Transaction, MeterValues).
+
+- **Access UI**: [http://localhost:8080](http://localhost:8080)
+- **Source Code**: Located in `./tests/MicroOcppSimulator` (Vendored)
+
+**How to Start a Charge:**
+
+1. Open the UI.
+2. Set **Plugged** and **Ready** switches to `ON`.
+3. Go to the "Transaction Control Panel".
+4. Enter a valid **Tag ID** (e.g., `DEADBEEF`).
+5. Click **Update Transaction**.
+6. *Note: The status badge is read-only; clicking it won't start charging.*
+
+*This simulator has been patched (`evse.cpp`) to fix default states for smoother testing.*
+
+### 2. EVerest Simulator (Advanced)
+
+A full-featured, industry-standard simulator by LF Energy. It provides deep inspection capabilities and simulates realistic hardware behaviors.
+
+- **Simulator UI**: [http://localhost:1880/ui/](http://localhost:1880/ui/) (Control the charger)
+- **OCPP Logs**: [http://localhost:8888](http://localhost:8888) (Visualize raw OCPP messages)
+- **Node-RED**: [http://localhost:1880](http://localhost:1880) (Logic flows)
+
+**How to Use:**
+
+1. Open the **Simulator UI**.
+2. Use the toggles to simulate plugging in a cable (`Plug In`).
+3. Watch the **OCPP Logs** validation in real-time on port 8888.
+
+---
+
 ## 🤝 Contributing
 
 We welcome contributions!

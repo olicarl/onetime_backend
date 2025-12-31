@@ -25,6 +25,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://user:password@db/onetime
+    volumes:
+      - .:/code
     depends_on:
       db:
         condition: service_healthy
@@ -42,6 +44,41 @@ services:
       - "8080:8000"
     depends_on:
       - backend
+
+  everest-mqtt:
+    image: ghcr.io/everest/everest-demo/mqtt-server:latest
+    networks:
+      default:
+        aliases:
+          - mqtt-server
+
+  everest-manager:
+    build:
+      context: ./reference_docs/repos/citrineos-core/Server/everest
+      dockerfile: Dockerfile
+      args:
+        - EVEREST_IMAGE_TAG=latest
+    ports:
+      - 8888:8888
+    depends_on:
+      - everest-mqtt
+      - backend
+    environment:
+      - MQTT_SERVER_ADDRESS=everest-mqtt
+      - EVEREST_TARGET_URL=backend:8000/ocpp/
+      - OCPP_VERSION=one
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+
+  everest-nodered:
+    image: ghcr.io/everest/everest-demo/nodered:latest
+    depends_on:
+      - everest-mqtt
+    ports:
+      - 1880:1880
+    environment:
+      - MQTT_SERVER_ADDRESS=everest-mqtt
+      - FLOWS=/config/config-sil-two-evse-flow.json
 
 volumes:
   postgres_data:
