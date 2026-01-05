@@ -138,7 +138,7 @@ To verify the system is working correctly, run the integration tests. These simu
 
 ## 🧪 Testing Environments
 
-This project relies on the **EVerest Simulator** for testing charging scenarios and behaviors.
+This project comes with a **pre-configured charging station simulator** to help you test different scenarios and charger behaviors.
 
 ### EVerest Simulator (Advanced)
 

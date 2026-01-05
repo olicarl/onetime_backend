@@ -51,7 +51,7 @@ class StationService:
             return {
                 "status": "Accepted",
                 "interval": 300,
-                "current_time": datetime.utcnow().isoformat()
+                "current_time": datetime.utcnow().isoformat() + "Z"
             }
         except Exception as e:
             logger.error(f"Error processing boot for {charger_id}: {e}")
@@ -68,7 +68,7 @@ class StationService:
                 station.is_online = True
                 db.commit()
             
-            return {"current_time": datetime.utcnow().isoformat()}
+            return {"current_time": datetime.utcnow().isoformat() + "Z"}
         finally:
             db.close()
 

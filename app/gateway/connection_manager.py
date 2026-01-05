@@ -14,7 +14,7 @@ class ConnectionRegistry:
         return cls._instance
 
     async def connect(self, charger_id: str, websocket: WebSocket):
-        await websocket.accept()
+        await websocket.accept(subprotocol='ocpp1.6')
         self.active_connections[charger_id] = websocket
         logger.info(f"Charger {charger_id} connected. Total: {len(self.active_connections)}")
         await station_service.set_station_online(charger_id)

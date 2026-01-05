@@ -38,8 +38,6 @@ services:
     depends_on:
       - backend
 
-
-
   everest-mqtt:
     image: ghcr.io/everest/everest-demo/mqtt-server:latest
     networks:
