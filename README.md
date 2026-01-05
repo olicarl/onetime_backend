@@ -138,27 +138,9 @@ To verify the system is working correctly, run the integration tests. These simu
 
 ## 🧪 Testing Environments
 
-This project comes with **two pre-configured charging station simulators** to help you test different scenarios and charger behaviors.
+This project relies on the **EVerest Simulator** for testing charging scenarios and behaviors.
 
-### 1. MicroOcpp Simulator (Lightweight)
-
-A lightweight, web-based simulator perfect for quick testing of basic OCPP flows (Boot, Auth, Transaction, MeterValues).
-
-- **Access UI**: [http://localhost:8080](http://localhost:8080)
-- **Source Code**: Located in `./tests/MicroOcppSimulator` (Vendored)
-
-**How to Start a Charge:**
-
-1. Open the UI.
-2. Set **Plugged** and **Ready** switches to `ON`.
-3. Go to the "Transaction Control Panel".
-4. Enter a valid **Tag ID** (e.g., `DEADBEEF`).
-5. Click **Update Transaction**.
-6. *Note: The status badge is read-only; clicking it won't start charging.*
-
-*This simulator has been patched (`evse.cpp`) to fix default states for smoother testing.*
-
-### 2. EVerest Simulator (Advanced)
+### EVerest Simulator (Advanced)
 
 A full-featured, industry-standard simulator by LF Energy. It provides deep inspection capabilities and simulates realistic hardware behaviors.
 

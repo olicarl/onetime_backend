@@ -38,12 +38,7 @@ services:
     depends_on:
       - backend
 
-  simulator:
-    build: ./tests/MicroOcppSimulator
-    ports:
-      - "8080:8000"
-    depends_on:
-      - backend
+
 
   everest-mqtt:
     image: ghcr.io/everest/everest-demo/mqtt-server:latest
