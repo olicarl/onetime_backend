@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Plus, Trash2, Edit } from "lucide-react";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 
 interface Renter {
     id: number;
@@ -61,6 +62,10 @@ export default function RentersPage() {
         description: "",
         status: "Accepted"
     });
+
+    // Delete Confirmation State
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ type: 'renter' | 'token', id: number | string, name?: string } | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -138,14 +143,10 @@ export default function RentersPage() {
         }
     };
 
-    const handleDeleteRenter = async (id: number) => {
-        if (!confirm("Are you sure?")) return;
-        try {
-            await axios.delete(`/api/admin/renters/${id}`);
-            fetchData();
-        } catch (error) {
-            console.error("Failed to delete renter", error);
-        }
+
+    const confirmDeleteRenter = (renter: Renter) => {
+        setItemToDelete({ type: 'renter', id: renter.id, name: renter.name });
+        setDeleteDialogOpen(true);
     };
 
     // --- Token Actions ---
@@ -205,6 +206,30 @@ export default function RentersPage() {
         } catch (error) {
             console.error("Failed to save token", error);
             alert("Failed to save token");
+        }
+    };
+
+    const confirmDeleteToken = (token: AuthorizationToken) => {
+        setItemToDelete({ type: 'token', id: token.token, name: token.token });
+        setDeleteDialogOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+
+        try {
+            if (itemToDelete.type === 'renter') {
+                await axios.delete(`/api/admin/renters/${itemToDelete.id}`);
+            } else {
+                await axios.delete(`/api/admin/auth-tokens/${itemToDelete.id}`);
+            }
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete item", error);
+            alert("Failed to delete item. It may have active dependencies.");
+        } finally {
+            setDeleteDialogOpen(false);
+            setItemToDelete(null);
         }
     };
 
@@ -318,7 +343,7 @@ export default function RentersPage() {
                                                         variant="ghost"
                                                         size="icon"
                                                         className="text-red-500 hover:text-red-700"
-                                                        onClick={() => handleDeleteRenter(renter.id)}
+                                                        onClick={() => confirmDeleteRenter(renter)}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
@@ -366,10 +391,18 @@ export default function RentersPage() {
                                                 <TableCell className="text-right">
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
+                                                        size="icon"
                                                         onClick={() => openEditToken(token)}
                                                     >
-                                                        <Edit className="h-4 w-4 mr-2" /> Edit
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-red-500 hover:text-red-700"
+                                                        onClick={() => confirmDeleteToken(token)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
@@ -380,6 +413,15 @@ export default function RentersPage() {
                         )}
                     </CardContent>
                 </Card>
+
+                <DeleteConfirmationDialog
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    onConfirm={handleConfirmDelete}
+                    title={`Delete ${itemToDelete?.type === 'renter' ? 'Renter' : 'Token'}?`}
+                    description={`Are you sure you want to delete this ${itemToDelete?.type}? This action cannot be undone.`}
+                    itemDescription={itemToDelete?.name}
+                />
 
                 {/* Renter CREATE/EDIT Dialog */}
                 <Dialog open={renterDialogOpen} onOpenChange={setRenterDialogOpen}>

@@ -33,8 +33,14 @@ class ChargerDashboardItem(BaseModel):
     model: str | None
     is_online: bool
     parking_spot_label: str | None
+    parking_spot_id: int | None
     connectors: List[ConnectorStatus]
     active_session: Optional[ActiveSessionRef] = None
+
+class ChargerUpdate(BaseModel):
+    vendor: Optional[str] = None
+    model: Optional[str] = None
+    parking_spot_id: Optional[int] = None # To link/unlink
 
 class ChargerDetail(BaseModel):
     id: str
@@ -44,6 +50,7 @@ class ChargerDetail(BaseModel):
     is_online: bool
     last_heartbeat: datetime | None
     parking_spot_label: str | None
+    parking_spot_id: int | None # Added for easier edit binding
     connectors: List[ConnectorStatus]
 
 class SessionLogItem(BaseModel):

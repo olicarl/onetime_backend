@@ -75,11 +75,11 @@ class ChargingStation(Base):
     firmware_version = Column(String, nullable=True)
 
     parking_spot = relationship("ParkingSpot", back_populates="charging_station", uselist=False)
-    sessions = relationship("ChargingSession", back_populates="station")
-    connectors = relationship("StationConnector", back_populates="station")
-    configurations = relationship("StationConfiguration", back_populates="station")
-    boot_logs = relationship("BootLog", back_populates="station")
-    ocpp_logs = relationship("OcppMessageLog", back_populates="station")
+    sessions = relationship("ChargingSession", back_populates="station", cascade="all, delete-orphan")
+    connectors = relationship("StationConnector", back_populates="station", cascade="all, delete-orphan")
+    configurations = relationship("StationConfiguration", back_populates="station", cascade="all, delete-orphan")
+    boot_logs = relationship("BootLog", back_populates="station", cascade="all, delete-orphan")
+    ocpp_logs = relationship("OcppMessageLog", back_populates="station", cascade="all, delete-orphan")
 
 
 class AuthorizationToken(Base):
@@ -112,7 +112,7 @@ class ChargingSession(Base):
 
     station = relationship("ChargingStation", back_populates="sessions")
     token_rel = relationship("AuthorizationToken", back_populates="sessions")
-    meter_readings = relationship("MeterReading", back_populates="session")
+    meter_readings = relationship("MeterReading", back_populates="session", cascade="all, delete-orphan")
 
 
 class StationConnector(Base):

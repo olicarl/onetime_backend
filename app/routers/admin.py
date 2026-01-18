@@ -12,6 +12,7 @@ from app.schemas import (
     ConnectorStatus, 
     ChargerDashboardItem, 
     ChargerDetail, 
+    ChargerUpdate, # Added
     SessionLogItem, 
     OcppLogItem, 
     MeterReadingItem,
@@ -77,6 +78,7 @@ def get_chargers(db: Session = Depends(get_db)):
             model=c.model,
             is_online=c.is_online,
             parking_spot_label=spot_label,
+            parking_spot_id=c.parking_spot.id if c.parking_spot else None,
             connectors=connectors_data,
             active_session=active_sess_data
         ))
@@ -205,6 +207,84 @@ def get_charger_logs(charger_id: str, db: Session = Depends(get_db)):
         )
         for l in logs
     ]
+
+@router.put("/chargers/{charger_id}", response_model=ChargerDetail)
+def update_charger(charger_id: str, charger: ChargerUpdate, db: Session = Depends(get_db)):
+    db_charger = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+    if not db_charger:
+        raise HTTPException(status_code=404, detail="Charger not found")
+
+    if charger.vendor is not None:
+        db_charger.vendor = charger.vendor
+    if charger.model is not None:
+        db_charger.model = charger.model
+        
+    # Handle Parking Spot Linking
+    # Note: ParkingSpot holds the FK charging_station_id
+    if charger.parking_spot_id is not None:
+        from app.models import ParkingSpot
+        # 1. Clear any existing link for this charger on OTHER spots (since 1:1)
+        # We need to find if this charger is already linked to a spot
+        existing_spot = db.query(ParkingSpot).filter(ParkingSpot.charging_station_id == charger_id).first()
+        if existing_spot and existing_spot.id != charger.parking_spot_id:
+            existing_spot.charging_station_id = None
+        
+        # 2. Link the new spot
+        # If charger.parking_spot_id is 0 or -1 (unlinking convention?), or we can just assume if passed we link.
+        # If we interpret None as "no change", then unlinking must be done explicitly?
+        # But for now, let's strictly link if ID is valid.
+        # If user wants to unlink, they would update the parking spot directly to set charger=None.
+        # But let's check if we can handle unlinking here. 
+        # For now, simplistic: if valid ID, link it.
+        
+        target_spot = db.query(ParkingSpot).filter(ParkingSpot.id == charger.parking_spot_id).first()
+        if target_spot:
+             # Ensure this spot doesn't already have another charger?
+             # Or just overwrite. Overwriting is usually preferred in admin UI.
+             target_spot.charging_station_id = charger_id
+    
+    # If we wanted to allow unlinking via this endpoint, we'd need a specific value logic since this is a PATCH-like update where None means missing.
+    
+    db.commit()
+    db.refresh(db_charger)
+    
+    # Construct response manually or re-query to get relationships populated
+    # OR rely on ORM
+    
+    connectors_data = [
+        ConnectorStatus(connector_id=conn.connector_id, status=conn.status)
+        for conn in db_charger.connectors
+    ]
+    
+    return ChargerDetail(
+        id=db_charger.id,
+        vendor=db_charger.vendor,
+        model=db_charger.model,
+        firmware_version=db_charger.firmware_version,
+        is_online=db_charger.is_online,
+        last_heartbeat=db_charger.last_heartbeat,
+        parking_spot_label=db_charger.parking_spot.label if db_charger.parking_spot else None,
+        parking_spot_id=db_charger.parking_spot.id if db_charger.parking_spot else None,
+        connectors=connectors_data
+    )
+
+@router.delete("/chargers/{charger_id}")
+def delete_charger(charger_id: str, db: Session = Depends(get_db)):
+    db_charger = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+    if not db_charger:
+        raise HTTPException(status_code=404, detail="Charger not found")
+
+    if db_charger.is_online:
+        raise HTTPException(status_code=400, detail="Cannot delete an online charger. Please disconnect it first.")
+
+    # Unlink from parking spot if any (Constraint management)
+    # Although ON DELETE SET NULL might be configured, let's be explicit
+    if db_charger.parking_spot:
+        db_charger.parking_spot.charging_station_id = None
+        
+    db.delete(db_charger)
+    db.commit()
+    return {"message": "Charger deleted"}
 
 # Session details (Graph data)
 
@@ -347,8 +427,23 @@ def delete_renter(renter_id: int, db: Session = Depends(get_db)):
     if not db_renter:
         raise HTTPException(status_code=404, detail="Renter not found")
 
-    db.delete(db_renter)
-    db.commit()
+    # Unlink dependencies manually to avoid FK constraint errors
+    # 1. Unlink Parking Spots
+    for spot in db_renter.parking_spots:
+        spot.renter_id = None
+        
+    # 2. Unlink Auth Tokens
+    for token in db_renter.authorization_tokens:
+        token.renter_id = None
+
+    try:
+        db.delete(db_renter)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Log error in real app
+        raise HTTPException(status_code=400, detail="Cannot delete renter due to dependencies or DB error")
+        
     return {"message": "Renter deleted"}
 
 
@@ -419,8 +514,13 @@ def delete_parking_spot(spot_id: int, db: Session = Depends(get_db)):
     if not db_spot:
         raise HTTPException(status_code=404, detail="Parking spot not found")
 
-    db.delete(db_spot)
-    db.commit()
+    try:
+        db.delete(db_spot)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete parking spot due to DB reference or constraint.")
+
     return {"message": "Parking spot deleted"}
 
 
@@ -494,6 +594,15 @@ def delete_auth_token(token: str, db: Session = Depends(get_db)):
     if not db_token:
         raise HTTPException(status_code=404, detail="Token not found")
         
-    db.delete(db_token)
-    db.commit()
+    # Check for sessions?
+    if db_token.sessions:
+        raise HTTPException(status_code=400, detail="Cannot delete token with associated charging sessions")
+
+    try:
+        db.delete(db_token)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete token")
+        
     return {"message": "Token deleted"}
