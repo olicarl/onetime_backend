@@ -9,6 +9,10 @@ from app.routers import auth, admin
 
 app = FastAPI(title="Onetime Backend", version="2.0.0")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Middleware
 app.add_middleware(
     CORSMiddleware,

@@ -10,6 +10,7 @@ class LoginRequest(BaseModel):
     password: str
 
 class UserResponse(BaseModel):
+    id: int
     username: str
     role: str
     mode: str
@@ -69,5 +70,113 @@ class MeterReadingItem(BaseModel):
     value: float
     unit: str | None
     measurand: str | None
-    phase: str | None
     context: str | None
+
+
+# --- User Management Schemas ---
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "admin"
+    is_active: bool = True
+
+class UserUpdate(BaseModel):
+    password: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Renter Management Schemas ---
+
+class RenterCreate(BaseModel):
+    name: str
+    contact_email: str
+    phone_number: Optional[str] = None
+    is_active: bool = True
+
+class RenterUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_email: Optional[str] = None
+    phone_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class RenterOut(BaseModel):
+    id: int
+    name: str
+    contact_email: str
+    phone_number: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Parking Spot Management Schemas ---
+
+class ParkingSpotCreate(BaseModel):
+    label: str
+    floor_level: Optional[str] = None
+    renter_id: Optional[int] = None
+    charging_station_id: Optional[str] = None
+
+class ParkingSpotUpdate(BaseModel):
+    label: Optional[str] = None
+    floor_level: Optional[str] = None
+    renter_id: Optional[int] = None
+    charging_station_id: Optional[str] = None
+
+class ParkingSpotOut(BaseModel):
+    id: int
+    label: str
+    floor_level: Optional[str] = None
+    renter_id: Optional[int] = None
+    charging_station_id: Optional[str] = None
+    
+    # Optional nested details if needed
+    renter: Optional[RenterOut] = None 
+    # charging_station: ... avoid circular or too big
+
+    class Config:
+        from_attributes = True
+
+
+# --- Authorization Token Management Schemas ---
+
+from app.models import AuthorizationStatus
+
+class AuthorizationTokenCreate(BaseModel):
+    token: str
+    renter_id: Optional[int] = None
+    description: Optional[str] = None
+    status: AuthorizationStatus = AuthorizationStatus.Accepted
+    expiry_date: Optional[datetime] = None
+
+class AuthorizationTokenUpdate(BaseModel):
+    renter_id: Optional[int] = None
+    description: Optional[str] = None
+    status: Optional[AuthorizationStatus] = None
+    expiry_date: Optional[datetime] = None
+
+class AuthorizationTokenOut(BaseModel):
+    token: str
+    renter_id: Optional[int]
+    description: Optional[str]
+    status: AuthorizationStatus
+    expiry_date: Optional[datetime]
+    
+    renter: Optional[RenterOut] = None
+
+    class Config:
+        from_attributes = True

@@ -11,6 +11,7 @@ class AuthorizationStatus(str, enum.Enum):
     Expired = "Expired"
     Invalid = "Invalid"
     ConcurrentTx = "ConcurrentTx"
+    Unknown = "Unknown"
 
 class ChargingStationStatus(str, enum.Enum):
     Available = "Available"
@@ -85,7 +86,7 @@ class AuthorizationToken(Base):
     __tablename__ = "authorization_tokens"
 
     token = Column(String, primary_key=True, index=True) # idTag
-    renter_id = Column(Integer, ForeignKey("renters.id"), nullable=False)
+    renter_id = Column(Integer, ForeignKey("renters.id"), nullable=True)
     status = Column(Enum(AuthorizationStatus), default=AuthorizationStatus.Accepted)
     expiry_date = Column(DateTime, nullable=True)
     description = Column(String, nullable=True)

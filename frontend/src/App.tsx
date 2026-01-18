@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import LoginPage from "@/pages/LoginPage";
 import Dashboard from "@/pages/Dashboard";
 import ChargerDetail from "@/pages/ChargerDetail";
+import UsersPage from "@/pages/UsersPage";
+import RentersPage from "@/pages/RentersPage";
+import ParkingSpotsPage from "@/pages/ParkingSpotsPage";
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
 
@@ -45,6 +48,30 @@ function App() {
             element={
               <PrivateRoute>
                 <ChargerDetail />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <PrivateRoute>
+                <UsersPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/renters"
+            element={
+              <PrivateRoute>
+                <RentersPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/parking-spots"
+            element={
+              <PrivateRoute>
+                <ParkingSpotsPage />
               </PrivateRoute>
             }
           />

@@ -18,7 +18,7 @@ class DualModeAuthMiddleware(BaseHTTPMiddleware):
             if proxy_user:
                 # In a real app, you might sync this user to DB or just trust the header
                 # For now, we'll create a transient state object
-                request.state.user = {"username": proxy_user, "role": "admin", "mode": "cloud"}
+                request.state.user = {"id": 0, "username": proxy_user, "role": "admin", "mode": "cloud"}
                 return await call_next(request)
 
         # 2. Check for Session Cookie (Local Mode)
@@ -29,8 +29,10 @@ class DualModeAuthMiddleware(BaseHTTPMiddleware):
                 username = payload.get("sub")
                 if username:
                     # User authenticated via local login
-                    request.state.user = {"username": username, "role": "admin", "mode": "local"}
-                    return await call_next(request)
+                    user = user_service.get_user_by_username(username)
+                    if user:
+                        request.state.user = {"id": user.id, "username": user.username, "role": user.role, "mode": "local"}
+                        return await call_next(request)
 
         # 3. No Auth - Set state to None (Endpoints can decide to enforce or not)
         request.state.user = None

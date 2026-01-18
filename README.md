@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![uv](https://img.shields.io/badge/managed%20by-uv-purple)](https://github.com/astral-sh/uv)
+
 [![Docker](https://img.shields.io/badge/docker%20compose-v2-blue.svg)](https://docs.docker.com/compose/)
 
 A scalable, modular backend for an EV Charging Station Management System (CSMS) built with a **Simplified Monolithic Architecture**. This project implements the **OCPP 1.6 JSON** protocol, designed for reliability and ease of deployment.
@@ -31,7 +31,7 @@ The goal of this project is to provide a **Home Assistant-style backend** for mu
   - **Single Process**: Runs as a single, lightweight FastAPI application.
   - **In-Memory Event Bus**: Decoupled internal communication using `pyee`.
 - **Modern Tooling**:
-  - **Dependency Management**: Uses `uv` for ultra-fast package management.
+
   - **Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations.
 - **Simplicity**: No RabbitMQ or microservices overhead. Just Docker + Postgres.
 - **Extensible**: Modular logic layer for adding new features easily.
@@ -51,7 +51,6 @@ The goal of this project is to provide a **Home Assistant-style backend** for mu
 - **Event Bus**: [pyee](https://github.com/jfhbrook/pyee)
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
 - **Infrastructure**: Docker, Docker Compose (v2)
-- **Package Manager**: [uv](https://github.com/astral-sh/uv)
 
 ## 📂 Project Structure
 
@@ -66,7 +65,7 @@ onetime_backend/
 ├── alembic/                # Database Migrations
 ├── tests/                  # Integration and Unit Tests
 ├── docker-compose.yml      # Infrastructure (PostgreSQL)
-├── Makefile                # Shortcut commands for local dev
+
 ├── pyproject.toml          # Python dependencies
 └── README.md               # Project Documentation
 ```
@@ -76,11 +75,8 @@ onetime_backend/
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) (v2)
-- [uv](https://github.com/astral-sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
 ### Local Development Setup
-
-We use `make` and `uv` to streamline the development workflow.
 
 1. **Clone the repository**
 
@@ -89,51 +85,74 @@ We use `make` and `uv` to streamline the development workflow.
     cd onetime_backend
     ```
 
-2. **Setup Environment**
+2. **Start the Application**
 
-    Creates a virtual environment and installs dependencies.
-
-    ```bash
-    make setup
-    ```
-
-3. **Start Database**
-
-    Starts the PostgreSQL container on port **5433** (to avoid conflicts).
+    Starts the database and backend services.
 
     ```bash
-    make db
-    ```
-
-4. **Run Migrations**
-
-    Applies the database schema.
-
-    ```bash
-    make migrate
-    ```
-
-    *Tip: To create a new migration after changing models, use `make generate-migration`.*
-
-5. **Run the Server**
-
-    Starts the FastAPI backend locally with hot-reload.
-
-    ```bash
-    make run
+    docker compose up -d
     ```
 
     The server will be available at `http://127.0.0.1:8000`.
+    Migrations are applied automatically on startup.
+
+   ### 🔌 Service Access
+
+    Once running, you can access the different components at the following URLs:
+
+    | Service | URL | Description |
+    | :--- | :--- | :--- |
+    | **Backend API** | [http://localhost:8000](http://localhost:8000) | FastAPI Server & Swagger UI |
+    | **Frontend** | [http://localhost:5173](http://localhost:5173) | Web Management Interface |
+    | **Simulator UI** | [http://localhost:1880/ui/](http://localhost:1880/ui/) | Control the simulated charger |
+    | **OCPP Logs** | [http://localhost:8888](http://localhost:8888) | View raw OCPP messages |
+    | **Node-RED** | [http://localhost:1880](http://localhost:1880) | Simulator Logic Flows |
+    | **Database** | `localhost:5433` | PostgreSQL (user/password) |
+
+   ## 💻 Development Workflow
+
+    This project is designed to be developed entirely using Docker.
+
+   ### Backend Development
+
+    The backend code is mounted into the container, so changes are applied automatically.
+
+    - **Code Changes**: Edit files in `app/`, and the server will auto-reload.
+    - **Logs**: View logs with `docker compose logs -f backend`.
+
+   ### Frontend Development
+
+    The frontend is built inside a Docker container.
+
+    - **Code Changes**: After editing files in `frontend/`, rebuild the container to see changes:
+
+        ```bash
+        docker compose up -d --build frontend
+        ```
+
+   ### Database Migrations
+
+    To generate a new migration after modifying `models.py`:
+
+    ```bash
+    docker compose exec backend sh -c "alembic revision --autogenerate -m 'Description of change'"
+    ```
+
+    Then restart the backend to apply it:
+
+    ```bash
+    docker compose restart backend
+    ```
 
 ### Running Tests
 
 To verify the system is working correctly, run the integration tests. These simulate a Charging Station connecting to the Gateway and performing a full boot, auth, and transaction flow.
 
-1. Ensure the server is running (`make run`) in one terminal.
-2. In a separate terminal, run:
+1. Ensure the server is running (`docker compose up -d`).
+2. Run the tests inside the container:
 
     ```bash
-    make test
+    docker compose exec backend python -m tests.integration.test_full_flow
     ```
 
 ## 🧪 Testing Environments
@@ -169,8 +188,8 @@ We welcome contributions!
 ### Development Guidelines
 
 - **Code Style**: Follow PEP 8.
-- **Testing**: Run `make test` before submitting.
-- **Dependencies**: Add new packages using `uv add <package>` and update `requirements.txt` if needed.
+- **Testing**: Run tests using `docker compose exec backend python -m tests.integration.test_full_flow`.
+- **Dependencies**: Add new packages to `requirements.txt` and rebuild (`docker compose build`).
 
 ## 📄 License
 

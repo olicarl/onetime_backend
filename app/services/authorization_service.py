@@ -15,7 +15,14 @@ class AuthorizationService:
             token = db.query(AuthorizationToken).filter(AuthorizationToken.token == id_tag).first()
             
             if not token:
-                logger.warning(f"Unknown token: {id_tag}")
+                logger.warning(f"Unknown token: {id_tag}. Saving as Unknown.")
+                new_token = AuthorizationToken(
+                    token=id_tag,
+                    status=AuthorizationStatus.Unknown,
+                    description="Auto-created unknown token"
+                )
+                db.add(new_token)
+                db.commit()
                 return {"id_tag_info": {"status": "Invalid"}}
             
             if token.status != AuthorizationStatus.Accepted:

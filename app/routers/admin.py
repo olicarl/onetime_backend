@@ -236,3 +236,264 @@ def get_session_readings(transaction_id: int, db: Session = Depends(get_db)):
             pass
             
     return clean_readings
+
+
+# --- User Management Endpoints ---
+
+from app.schemas import UserCreate, UserUpdate, UserOut
+from app.models import User
+from app.security import get_password_hash
+
+@router.get("/users", response_model=List[UserOut])
+def get_users(db: Session = Depends(get_db)):
+    return db.query(User).all()
+
+@router.post("/users", response_model=UserOut)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    hashed_password = get_password_hash(user.password)
+    new_user = User(
+        username=user.username,
+        password_hash=hashed_password,
+        role=user.role,
+        is_active=user.is_active
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+@router.put("/users/{user_id}", response_model=UserOut)
+def update_user(user_id: int, user: UserUpdate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.password:
+        db_user.password_hash = get_password_hash(user.password)
+    if user.role is not None:
+        db_user.role = user.role
+    if user.is_active is not None:
+        db_user.is_active = user.is_active
+        
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db.delete(db_user)
+    db.commit()
+    return {"message": "User deleted"}
+
+
+# --- Renter Management Endpoints ---
+
+from app.schemas import RenterCreate, RenterUpdate, RenterOut
+from app.models import Renter
+
+@router.get("/renters", response_model=List[RenterOut])
+def get_renters(db: Session = Depends(get_db)):
+    return db.query(Renter).all()
+
+@router.post("/renters", response_model=RenterOut)
+def create_renter(renter: RenterCreate, db: Session = Depends(get_db)):
+    # Basic check if email exists?
+    # Basic check if email exists?
+    # db_renter = db.query(Renter).filter(Renter.contact_email == renter.contact_email).first()
+    # if db_renter:
+    #     raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_renter = Renter(
+        name=renter.name,
+        contact_email=renter.contact_email,
+        phone_number=renter.phone_number,
+        is_active=renter.is_active
+    )
+    db.add(new_renter)
+    db.commit()
+    db.refresh(new_renter)
+    return new_renter
+
+@router.put("/renters/{renter_id}", response_model=RenterOut)
+def update_renter(renter_id: int, renter: RenterUpdate, db: Session = Depends(get_db)):
+    db_renter = db.query(Renter).filter(Renter.id == renter_id).first()
+    if not db_renter:
+        raise HTTPException(status_code=404, detail="Renter not found")
+
+    if renter.name is not None:
+        db_renter.name = renter.name
+    if renter.contact_email is not None:
+        db_renter.contact_email = renter.contact_email
+    if renter.phone_number is not None:
+        db_renter.phone_number = renter.phone_number
+    if renter.is_active is not None:
+        db_renter.is_active = renter.is_active
+
+    db.commit()
+    db.refresh(db_renter)
+    return db_renter
+
+@router.delete("/renters/{renter_id}")
+def delete_renter(renter_id: int, db: Session = Depends(get_db)):
+    db_renter = db.query(Renter).filter(Renter.id == renter_id).first()
+    if not db_renter:
+        raise HTTPException(status_code=404, detail="Renter not found")
+
+    db.delete(db_renter)
+    db.commit()
+    return {"message": "Renter deleted"}
+
+
+# --- Parking Spot Management Endpoints ---
+
+from app.schemas import ParkingSpotCreate, ParkingSpotUpdate, ParkingSpotOut
+from app.models import ParkingSpot
+
+@router.get("/parking-spots", response_model=List[ParkingSpotOut])
+def get_parking_spots(db: Session = Depends(get_db)):
+    return db.query(ParkingSpot).all()
+
+@router.post("/parking-spots", response_model=ParkingSpotOut)
+def create_parking_spot(spot: ParkingSpotCreate, db: Session = Depends(get_db)):
+    db_spot = db.query(ParkingSpot).filter(ParkingSpot.label == spot.label).first()
+    if db_spot:
+        raise HTTPException(status_code=400, detail="Parking Spot label already exists")
+
+    new_spot = ParkingSpot(
+        label=spot.label,
+        floor_level=spot.floor_level,
+        renter_id=spot.renter_id,
+        charging_station_id=spot.charging_station_id
+    )
+    db.add(new_spot)
+    db.commit()
+    db.refresh(new_spot)
+    return new_spot
+
+@router.put("/parking-spots/{spot_id}", response_model=ParkingSpotOut)
+def update_parking_spot(spot_id: int, spot: ParkingSpotUpdate, db: Session = Depends(get_db)):
+    db_spot = db.query(ParkingSpot).filter(ParkingSpot.id == spot_id).first()
+    if not db_spot:
+        raise HTTPException(status_code=404, detail="Parking spot not found")
+
+    if spot.label is not None:
+        db_spot.label = spot.label
+    if spot.floor_level is not None:
+        db_spot.floor_level = spot.floor_level
+    
+    # Allow setting to None/null if explicitly sent, or changing value
+    # We need to handle optional fields correctly. 
+    # This naive update assumes if it's sent, update it.
+    if spot.renter_id is not None:
+        # 0 or -1 could mean 'unlink', but pydantic sends None if missing. 
+        # If we want to unlink, we might need explicit field logic.
+        # For now let's assume valid ID or existing. 
+        # If user wants to unlink, we might need a specific action or handle nullable
+        db_spot.renter_id = spot.renter_id
+        
+    if spot.charging_station_id is not None:
+        db_spot.charging_station_id = spot.charging_station_id
+
+    # Handle unlinking logic if needed (e.g. passing explicit nulls in update? Pydantic strips None usually)
+    # A robust implementation would differentiate "unset" vs "set to null".
+    # For a simple start:
+    # If the user sends a specific value in a "unlink_renter" flag or similar, logic can handle it.
+    # Alternatively, use a separate UNSET object.
+    # We will stick to simple updates for now.
+
+    db.commit()
+    db.refresh(db_spot)
+    return db_spot
+
+@router.delete("/parking-spots/{spot_id}")
+def delete_parking_spot(spot_id: int, db: Session = Depends(get_db)):
+    db_spot = db.query(ParkingSpot).filter(ParkingSpot.id == spot_id).first()
+    if not db_spot:
+        raise HTTPException(status_code=404, detail="Parking spot not found")
+
+    db.delete(db_spot)
+    db.commit()
+    return {"message": "Parking spot deleted"}
+
+
+# --- Authorization Token Management Endpoints ---
+
+from app.schemas import AuthorizationTokenCreate, AuthorizationTokenUpdate, AuthorizationTokenOut
+from app.models import AuthorizationToken
+
+@router.get("/auth-tokens", response_model=List[AuthorizationTokenOut])
+def get_auth_tokens(db: Session = Depends(get_db)):
+    return db.query(AuthorizationToken).all()
+
+@router.post("/auth-tokens", response_model=AuthorizationTokenOut)
+def create_auth_token(token_data: AuthorizationTokenCreate, db: Session = Depends(get_db)):
+    db_token = db.query(AuthorizationToken).filter(AuthorizationToken.token == token_data.token).first()
+    if db_token:
+        # If it exists (maybe unknown), update it? Or error?
+        # User might want to 'claim' an unknown token.
+        # If status is Unknown, we can update it.
+        # But simple CRUD usually errors on duplicate ID.
+        # Let's check status just in case, but standard is 400.
+        raise HTTPException(status_code=400, detail="Token already exists")
+
+    new_token = AuthorizationToken(
+        token=token_data.token,
+        renter_id=token_data.renter_id,
+        description=token_data.description,
+        status=token_data.status,
+        expiry_date=token_data.expiry_date
+    )
+    db.add(new_token)
+    db.commit()
+    db.refresh(new_token)
+    return new_token
+
+@router.put("/auth-tokens/{token}", response_model=AuthorizationTokenOut)
+def update_auth_token(token: str, token_data: AuthorizationTokenUpdate, db: Session = Depends(get_db)):
+    db_token = db.query(AuthorizationToken).filter(AuthorizationToken.token == token).first()
+    if not db_token:
+        raise HTTPException(status_code=404, detail="Token not found")
+        
+    if token_data.renter_id is not None:
+        # If 0 or -1 is sent to unlink?
+        # Assuming frontend sends null or omits if no change. 
+        # If explicit null is desired, we need unset logic.
+        # As per schema, it's Optional[int]. 
+        # If user wants to unlink, we assume they might send a special value or we can't easily detect 'set to null' with just Optional in Pydantic v1/defaults.
+        # But we made sure renter_id is nullable in DB.
+        # Let's assume if it's passed it's a value. If they want to unlink, maybe handle 0?
+        # For now, let's just update if value is present.
+        # NOTE: standard pydantic .dict(exclude_unset=True) approach in service layer is better.
+        # Here we do manual checks.
+        db_token.renter_id = token_data.renter_id
+        
+    if token_data.description is not None:
+        db_token.description = token_data.description
+    
+    if token_data.status is not None:
+        db_token.status = token_data.status
+        
+    if token_data.expiry_date is not None:
+        db_token.expiry_date = token_data.expiry_date
+
+    db.commit()
+    db.refresh(db_token)
+    return db_token
+
+@router.delete("/auth-tokens/{token}")
+def delete_auth_token(token: str, db: Session = Depends(get_db)):
+    db_token = db.query(AuthorizationToken).filter(AuthorizationToken.token == token).first()
+    if not db_token:
+        raise HTTPException(status_code=404, detail="Token not found")
+        
+    db.delete(db_token)
+    db.commit()
+    return {"message": "Token deleted"}
