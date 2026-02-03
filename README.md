@@ -194,3 +194,26 @@ We welcome contributions!
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
+## 🐳 CasaOS Deployment
+
+This project is ready to be installed on [CasaOS](https://casaos.io/) using a custom Docker Compose file.
+
+### One-Click Installation (App Store)
+
+1. Open your CasaOS dashboard.
+2. Click the **+** button and select **Install a Custom App**.
+3. Click the import icon (top right) in the custom app window.
+4. Paste the content of `casaos-compose.yml` or upload the file.
+5. **Important**: Before installing, change `your_dockerhub_username` in the image fields to your actual Docker Hub username (or the username where the images are hosted).
+6. Click **Install**.
+
+### Setup for Image Publishing (GitHub Actions)
+
+To automatically publish the latest version of the app to Docker Hub whenever you push to GitHub:
+
+1. Go to your GitHub Repository **Settings** > **Secrets and variables** > **Actions**.
+2. Create the following repository NEW secrets:
+   - `DOCKER_USERNAME`: Your Docker Hub username.
+   - `DOCKER_PASSWORD`: Your Docker Hub Access Token.
+3. Push your code to the `main` branch. The action will run, build the images, and push them to Docker Hub.

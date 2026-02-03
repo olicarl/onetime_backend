@@ -1,0 +1,61 @@
+name: onetime-backend
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: onetime
+    volumes:
+      - /DATA/AppData/onetime/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d onetime" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  backend:
+    image: your_dockerhub_username/onetime-backend:latest
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://user:password@db/onetime
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    image: your_dockerhub_username/onetime-frontend:latest
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  main: frontend
+  description:
+    en_us: "OneTime Backend and Frontend Application"
+  tagline:
+    en_us: "A full-stack application with Postgres, Backend, and Frontend"
+  developer: "Create"
+  author: "Create"
+  icon: "https://raw.githubusercontent.com/Walkxcode/dashboard-icons/main/png/casaos.png"
+  thumbnail: "https://raw.githubusercontent.com/Walkxcode/dashboard-icons/main/png/casaos.png"
+  title:
+    en_us: "OneTime Project"
+  category: "Business"
