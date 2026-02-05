@@ -16,9 +16,9 @@ while True:
         sock.close()
         print("Database is ready!")
         sys.exit(0)
-    except (socket.gaierror, ConnectionRefusedError, socket.timeout, OSError):
+    except (socket.gaierror, ConnectionRefusedError, socket.timeout, OSError) as e:
         if time.time() - start_time > timeout:
-            print(f"Error: Timed out waiting for database at {host}:{port}")
+            print(f"Error for {host}:{port}: {e}")
             sys.exit(1)
-        print("Database not ready yet, retrying in 2 seconds...")
+        print(f"Database not ready yet ({e}), retrying in 2 seconds...")
         time.sleep(2)
