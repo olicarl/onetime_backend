@@ -59,3 +59,7 @@ x-casaos:
   title:
     en_us: "OneTime Project"
   category: "Business"
+
+networks:
+  default:
+    driver: bridge
