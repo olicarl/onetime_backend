@@ -24,6 +24,8 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://user:password@db/onetime
+    links:
+      - db:db
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +40,8 @@ services:
     restart: always
     ports:
       - "8080:80"
+    links:
+      - backend:backend
     depends_on:
       backend:
         condition: service_healthy
@@ -60,6 +64,3 @@ x-casaos:
     en_us: "OneTime Project"
   category: "Business"
 
-networks:
-  default:
-    driver: bridge
