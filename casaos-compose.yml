@@ -18,7 +18,7 @@ services:
     restart: always
 
   backend:
-    image: your_dockerhub_username/onetime-backend:latest
+    image: olicarl/onetime-backend:latest
     restart: always
     ports:
       - "8000:8000"
@@ -34,7 +34,7 @@ services:
       retries: 5
 
   frontend:
-    image: your_dockerhub_username/onetime-frontend:latest
+    image: olicarl/onetime-frontend:latest
     restart: always
     ports:
       - "8080:80"
