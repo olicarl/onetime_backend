@@ -176,11 +176,11 @@ class StationService:
             # Sometimes a station might be offline, but its connectors still show a status other than Unknown
             # (e.g. from manual DB edits or race conditions)
             
-            # Subquery for offline station IDs
-            offline_stations_subquery = db.query(ChargingStation.id).filter(ChargingStation.is_online == False).subquery()
+            # Query for offline station IDs
+            offline_stations_query = db.query(ChargingStation.id).filter(ChargingStation.is_online == False)
             
             stuck_connectors_query = db.query(StationConnector).filter(
-                StationConnector.station_id.in_(offline_stations_subquery),
+                StationConnector.station_id.in_(offline_stations_query),
                 StationConnector.status != ChargingStationStatus.Unknown
             )
             
