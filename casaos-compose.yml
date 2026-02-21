@@ -41,6 +41,8 @@ services:
     restart: always
     ports:
       - "8080:80"
+    volumes:
+      - /home/olikeel91/onetime_backend/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     links:
       - backend:backend
     depends_on:
