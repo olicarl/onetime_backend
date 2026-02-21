@@ -36,6 +36,7 @@ class User(Base):
     role = Column(String, default="admin", nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_admin = Column(Boolean, default=True)  # For simplicity, all users are admins initially
 
 class Renter(Base):
     __tablename__ = "renters"
@@ -179,4 +180,44 @@ class OcppMessageLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     station = relationship("ChargingStation", back_populates="ocpp_logs")
+
+
+class RelaySettings(Base):
+    __tablename__ = "relay_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    enabled = Column(Boolean, default=False, nullable=False)
+    encrypted_token = Column(String, nullable=True)
+    relay_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def set_token(self, token: str):
+        """Encrypt and store token"""
+        from cryptography.fernet import Fernet
+        import os
+        
+        # Get or create encryption key
+        key = os.getenv("RELAY_ENCRYPTION_KEY")
+        if not key:
+            # Generate a key (in production, this should be set via env)
+            key = Fernet.generate_key().decode()
+        
+        f = Fernet(key.encode() if isinstance(key, str) else key)
+        self.encrypted_token = f.encrypt(token.encode()).decode()
+
+    def get_token(self) -> str:
+        """Decrypt and return token"""
+        from cryptography.fernet import Fernet
+        import os
+        
+        if not self.encrypted_token:
+            return None
+        
+        key = os.getenv("RELAY_ENCRYPTION_KEY")
+        if not key:
+            raise ValueError("RELAY_ENCRYPTION_KEY not set")
+        
+        f = Fernet(key.encode() if isinstance(key, str) else key)
+        return f.decrypt(self.encrypted_token.encode()).decode()
 
