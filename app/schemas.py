@@ -44,13 +44,13 @@ class ChargerUpdate(BaseModel):
 
 class ChargerDetail(BaseModel):
     id: str
-    vendor: str | None
-    model: str | None
-    firmware_version: str | None
+    vendor: str | None = None
+    model: str | None = None
+    firmware_version: str | None = None
     is_online: bool
-    last_heartbeat: datetime | None
-    parking_spot_label: str | None
-    parking_spot_id: int | None # Added for easier edit binding
+    last_heartbeat: datetime | None = None
+    parking_spot_label: str | None = None
+    parking_spot_id: int | None = None # Added for easier edit binding
     connectors: List[ConnectorStatus]
 
 class SessionLogItem(BaseModel):
