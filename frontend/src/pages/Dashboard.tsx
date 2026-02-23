@@ -27,27 +27,14 @@ interface Charger {
 export default function Dashboard() {
     const [chargers, setChargers] = useState<Charger[]>([]);
     const [loading, setLoading] = useState(true);
-    const [serverIp, setServerIp] = useState<string>(window.location.hostname);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchChargers();
-        fetchSystemInfo();
         // Poll every 10 seconds
         const interval = setInterval(fetchChargers, 10000);
         return () => clearInterval(interval);
     }, []);
-
-    const fetchSystemInfo = async () => {
-        try {
-            const res = await axios.get("/api/admin/system-info");
-            if (res.data.ip_address) {
-                setServerIp(res.data.ip_address);
-            }
-        } catch (error) {
-            console.error("Failed to fetch system info", error);
-        }
-    };
 
     const fetchChargers = async () => {
         try {
@@ -80,7 +67,7 @@ export default function Dashboard() {
                     <CardContent>
                         <div className="flex items-center gap-4 p-4 bg-muted rounded-md border">
                             <code className="flex-1 font-mono text-sm">
-                                ws://{serverIp}:8000/ocpp/&lt;CHARGE_POINT_ID&gt;
+                                ws://app.edge:8000/ocpp/&lt;CHARGE_POINT_ID&gt;
                             </code>
                             <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
                                 WebSocket URL
