@@ -134,3 +134,41 @@ def test_get_system_info(client, auth_headers):
     response = client.get("/api/admin/system-info", headers=auth_headers)
     assert response.status_code == status.HTTP_200_OK
     assert "ip_address" in response.json()
+
+def test_delete_auth_token_with_sessions(client, db_session, auth_headers):
+    from app.models import AuthorizationToken, ChargingSession, Renter, ChargingStation
+    from datetime import datetime
+
+    renter = Renter(name="Test Renter For Deletion", contact_email="del@example.com")
+    db_session.add(renter)
+    db_session.commit()
+    
+    token = AuthorizationToken(token="TAG_TO_DELETE", renter_id=renter.id)
+    db_session.add(token)
+    
+    station = ChargingStation(id="CP_DEL", is_online=True)
+    db_session.add(station)
+    
+    session = ChargingSession(
+        transaction_id=123456,
+        station_id="CP_DEL",
+        token_id="TAG_TO_DELETE",
+        start_time=datetime.utcnow(),
+        meter_start=0
+    )
+    db_session.add(session)
+    db_session.commit()
+
+    # Try to delete token
+    response = client.delete("/api/admin/auth-tokens/TAG_TO_DELETE", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["message"] == "Token deleted"
+
+    # Verify token is deleted
+    deleted_token = db_session.query(AuthorizationToken).filter(AuthorizationToken.token == "TAG_TO_DELETE").first()
+    assert deleted_token is None
+
+    # Verify session is still there and token_id is null
+    db_session.refresh(session)
+    assert session.token_id is None
+

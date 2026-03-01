@@ -70,6 +70,7 @@ class ChargingStation(Base):
 
     id = Column(String, primary_key=True, index=True) # chargePointId
     is_online = Column(Boolean, default=False)
+    kiosk_mode = Column(Boolean, default=False)
     last_heartbeat = Column(DateTime, nullable=True)
     model = Column(String, nullable=True)
     vendor = Column(String, nullable=True)
@@ -103,13 +104,18 @@ class ChargingSession(Base):
     transaction_id = Column(Integer, unique=True, nullable=False, index=True)
     station_id = Column(String, ForeignKey("charging_stations.id"), nullable=False)
     connector_id = Column(Integer, nullable=True) # Added for tracking which connector
-    token_id = Column(String, ForeignKey("authorization_tokens.token"), nullable=False)
+    token_id = Column(String, ForeignKey("authorization_tokens.token", ondelete="SET NULL"), nullable=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
     meter_start = Column(Integer, nullable=False) # Wh
     meter_stop = Column(Integer, nullable=True) # Wh
     total_energy_kwh = Column(Float, nullable=True)
     stop_reason = Column(String, nullable=True)
+    
+    # Snapshot metadata for historical persistence when token/renter is deleted
+    token_snapshot = Column(String, nullable=True)
+    renter_name_snapshot = Column(String, nullable=True)
+    renter_email_snapshot = Column(String, nullable=True)
 
     station = relationship("ChargingStation", back_populates="sessions")
     token_rel = relationship("AuthorizationToken", back_populates="sessions")

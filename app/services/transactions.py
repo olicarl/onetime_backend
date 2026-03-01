@@ -20,13 +20,29 @@ class TransactionService:
         """
         db: Session = SessionLocal()
         try:
+            # Check Kiosk Mode
+            kiosk_mode_enabled = False
+            station = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+            if station and getattr(station, "kiosk_mode", False):
+                kiosk_mode_enabled = True
+                
             # Check Token
-            token = db.query(AuthorizationToken).filter(AuthorizationToken.token == id_tag).first()
             status = "Accepted"
-            if not token: # In strict mode this might fail, but for now we might allow unknown if configured?
+            token = db.query(AuthorizationToken).filter(AuthorizationToken.token == id_tag).first()
+            if not token and not kiosk_mode_enabled: # In strict mode this might fail, but for now we might allow unknown if configured?
                 # For this assignment, assuming we rely on Authorize step or strict
                  status = "Invalid"
                  return {"transaction_id": 0, "id_tag_info": {"status": "Invalid"}}
+            elif not token and kiosk_mode_enabled:
+                 logger.info(f"Kiosk mode enabled for {charger_id}, bypassing token check for {id_tag}. Creating auto-token.")
+                 token = AuthorizationToken(
+                     token=id_tag,
+                     status="Accepted",
+                     description="Auto-created via Kiosk Mode"
+                 )
+                 db.add(token)
+                 db.commit()
+                 db.refresh(token)
             
             # Create Session
             # We assume unique transaction_id comes from station or we generate one?
@@ -38,9 +54,22 @@ class TransactionService:
             # We need to construct the object first to flush and get ID? 
             # Or use a sequence. Let's rely on DB auto-increment for internal ID, but return that as transactionID.
             
+            # Get Renter info for snapshotting
+            renter_name = None
+            renter_email = None
+            if token and token.renter_id:
+                from app.models import Renter
+                renter = db.query(Renter).filter(Renter.id == token.renter_id).first()
+                if renter:
+                    renter_name = renter.name
+                    renter_email = renter.contact_email
+
             session = ChargingSession(
                 station_id=charger_id,
                 token_id=id_tag,
+                token_snapshot=id_tag,
+                renter_name_snapshot=renter_name,
+                renter_email_snapshot=renter_email,
                 # generate a random int for unique constraints if needed, or use DB ID after flush
                 transaction_id=0, # Placeholder, will update after flush if possible or use sequence
                 connector_id=connector_id,

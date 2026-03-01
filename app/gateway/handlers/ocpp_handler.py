@@ -110,7 +110,7 @@ class ChargePoint(v16ChargePoint):
     @on(Action.authorize)
     async def on_authorize(self, id_tag: str, **kwargs):
         logger.info(f"Received Authorize for {id_tag} from {self.id}")
-        response = await authorization_service.authorize(id_tag=id_tag, **kwargs)
+        response = await authorization_service.authorize(id_tag=id_tag, charger_id=self.id, **kwargs)
         return call_result.Authorize(
             id_tag_info=response.get("id_tag_info")
         )

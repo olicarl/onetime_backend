@@ -23,6 +23,7 @@ interface ChargerDetail {
     vendor: string | null;
     model: string | null;
     is_online: boolean;
+    kiosk_mode: boolean;
     parking_spot_label: string | null;
     connectors: { connector_id: number; status: string; current_transaction_id?: number }[];
 }
@@ -94,6 +95,17 @@ export default function ChargerDetail() {
             console.error("Error fetching charger details", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleKioskMode = async () => {
+        if (!charger) return;
+        try {
+            const newMode = !charger.kiosk_mode;
+            await axios.put(`/api/admin/chargers/${charger.id}`, { kiosk_mode: newMode });
+            setCharger({ ...charger, kiosk_mode: newMode });
+        } catch (error) {
+            console.error("Error toggling kiosk mode", error);
         }
     };
 
@@ -176,9 +188,18 @@ export default function ChargerDetail() {
                                 </span>
                             )}
                         </h2>
-                        <p className="text-muted-foreground">
-                            {charger.vendor} {charger.model} • {charger.parking_spot_label || "No Spot"}
-                        </p>
+                        <div className="flex items-center gap-4 text-muted-foreground mt-1">
+                            <span>{charger.vendor} {charger.model} • {charger.parking_spot_label || "No Spot"}</span>
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="kiosk-mode" className="text-sm font-medium">Kiosk Mode (Free Vend)</label>
+                                <div
+                                    className={cn("w-10 h-5 rounded-full peer cursor-pointer transition-colors relative", charger.kiosk_mode ? "bg-green-500" : "bg-gray-300")}
+                                    onClick={toggleKioskMode}
+                                >
+                                    <div className={cn("absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform", charger.kiosk_mode ? "translate-x-5" : "translate-x-0")}></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

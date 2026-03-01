@@ -48,9 +48,10 @@ def get_chargers(db: Session = Depends(get_db)):
         active_sess_data = None
         if active_sess_model:
             # Join with Token -> Renter to get name? 
-            # For simplicity, accessing relations:
             renter_name = "Unknown"
-            if active_sess_model.token_rel and active_sess_model.token_rel.renter:
+            if active_sess_model.renter_name_snapshot:
+                renter_name = active_sess_model.renter_name_snapshot
+            elif active_sess_model.token_rel and active_sess_model.token_rel.renter:
                 renter_name = active_sess_model.token_rel.renter.name
             
             # Calculate energy consumed so far
@@ -77,6 +78,7 @@ def get_chargers(db: Session = Depends(get_db)):
             vendor=c.vendor,
             model=c.model,
             is_online=c.is_online,
+            kiosk_mode=c.kiosk_mode or False,
             parking_spot_label=spot_label,
             parking_spot_id=c.parking_spot.id if c.parking_spot else None,
             connectors=connectors_data,
@@ -143,6 +145,7 @@ def get_charger_detail(charger_id: str, db: Session = Depends(get_db)):
         model=c.model,
         firmware_version=c.firmware_version,
         is_online=c.is_online,
+        kiosk_mode=c.kiosk_mode or False,
         last_heartbeat=c.last_heartbeat,
         parking_spot_label=spot_label,
         connectors=connectors_data
@@ -167,6 +170,9 @@ def get_charger_sessions(charger_id: str, db: Session = Depends(get_db)):
         if total is None and s.meter_stop and s.meter_start:
              total = (s.meter_stop - s.meter_start) / 1000.0
              
+        # Determine id_tag to display (prefer snapshot)
+        display_id_tag = s.token_snapshot if s.token_snapshot else s.token_id
+             
         result.append(SessionLogItem(
             id=s.id,
             transaction_id=s.transaction_id,
@@ -176,7 +182,7 @@ def get_charger_sessions(charger_id: str, db: Session = Depends(get_db)):
             meter_stop=s.meter_stop,
             total_energy=total,
             stop_reason=s.stop_reason,
-            id_tag=s.token_id
+            id_tag=display_id_tag
         ))
     return result
 
@@ -218,6 +224,8 @@ def update_charger(charger_id: str, charger: ChargerUpdate, db: Session = Depend
         db_charger.vendor = charger.vendor
     if charger.model is not None:
         db_charger.model = charger.model
+    if charger.kiosk_mode is not None:
+        db_charger.kiosk_mode = charger.kiosk_mode
         
     # Handle Parking Spot Linking
     # Note: ParkingSpot holds the FK charging_station_id
@@ -262,6 +270,7 @@ def update_charger(charger_id: str, charger: ChargerUpdate, db: Session = Depend
         model=db_charger.model,
         firmware_version=db_charger.firmware_version,
         is_online=db_charger.is_online,
+        kiosk_mode=db_charger.kiosk_mode or False,
         last_heartbeat=db_charger.last_heartbeat,
         parking_spot_label=db_charger.parking_spot.label if db_charger.parking_spot else None,
         parking_spot_id=db_charger.parking_spot.id if db_charger.parking_spot else None,
@@ -594,9 +603,9 @@ def delete_auth_token(token: str, db: Session = Depends(get_db)):
     if not db_token:
         raise HTTPException(status_code=404, detail="Token not found")
         
-    # Check for sessions?
-    if db_token.sessions:
-        raise HTTPException(status_code=400, detail="Cannot delete token with associated charging sessions")
+    # Nullify token_id for associated sessions to maintain history
+    for session in db_token.sessions:
+        session.token_id = None
 
     try:
         db.delete(db_token)

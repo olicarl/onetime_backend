@@ -32,6 +32,7 @@ class ChargerDashboardItem(BaseModel):
     vendor: str | None
     model: str | None
     is_online: bool
+    kiosk_mode: bool = False
     parking_spot_label: str | None
     parking_spot_id: int | None
     connectors: List[ConnectorStatus]
@@ -41,6 +42,7 @@ class ChargerUpdate(BaseModel):
     vendor: Optional[str] = None
     model: Optional[str] = None
     parking_spot_id: Optional[int] = None # To link/unlink
+    kiosk_mode: Optional[bool] = None
 
 class ChargerDetail(BaseModel):
     id: str
@@ -48,6 +50,7 @@ class ChargerDetail(BaseModel):
     model: str | None = None
     firmware_version: str | None = None
     is_online: bool
+    kiosk_mode: bool = False
     last_heartbeat: datetime | None = None
     parking_spot_label: str | None = None
     parking_spot_id: int | None = None # Added for easier edit binding
@@ -62,7 +65,7 @@ class SessionLogItem(BaseModel):
     meter_stop: int | None
     total_energy: float | None
     stop_reason: str | None
-    id_tag: str
+    id_tag: str | None = None
 
 class OcppLogItem(BaseModel):
     id: int

@@ -1,17 +1,30 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import AuthorizationToken, AuthorizationStatus
+from app.models import AuthorizationToken, AuthorizationStatus, ChargingStation
 from app.config import logger
 
 class AuthorizationService:
     
-    async def authorize(self, id_tag: str, **kwargs):
+    async def authorize(self, id_tag: str, charger_id: str = None, **kwargs):
         """
         Check if the token exists and is active.
         """
         db: Session = SessionLocal()
         try:
+            # Check Kiosk Mode
+            if charger_id:
+                station = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+                if station and getattr(station, "kiosk_mode", False):
+                    logger.info(f"Kiosk mode is enabled for station {charger_id}. Approving {id_tag} automatically.")
+                    return {
+                        "id_tag_info": {
+                            "status": "Accepted",
+                            "expiry_date": None,
+                            "parent_id_tag": None
+                        }
+                    }
+
             token = db.query(AuthorizationToken).filter(AuthorizationToken.token == id_tag).first()
             
             if not token:
