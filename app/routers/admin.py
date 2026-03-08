@@ -212,13 +212,13 @@ def get_charger_logs(charger_id: str, date: Optional[str] = None, db: Session = 
             query = query.filter(
                 OcppMessageLog.timestamp >= start_datetime,
                 OcppMessageLog.timestamp <= end_datetime
-            )
+            ).order_by(OcppMessageLog.timestamp.desc())
         except ValueError:
-            pass
+            query = query.order_by(OcppMessageLog.timestamp.desc()).limit(100)
     else:
-        query = query.limit(100)
+        query = query.order_by(OcppMessageLog.timestamp.desc()).limit(100)
         
-    logs = query.order_by(OcppMessageLog.timestamp.desc()).all()
+    logs = query.all()
     
     return [
         OcppLogItem(
