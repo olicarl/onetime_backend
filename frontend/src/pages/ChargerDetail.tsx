@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -15,7 +15,8 @@ import {
     ResponsiveContainer,
     LineChart,
     Line,
-    Legend
+    Legend,
+    Brush
 } from "recharts";
 
 interface ChargerDetail {
@@ -24,6 +25,7 @@ interface ChargerDetail {
     model: string | null;
     is_online: boolean;
     kiosk_mode: boolean;
+    last_heartbeat?: string | null;
     parking_spot_label: string | null;
     connectors: { connector_id: number; status: string; current_transaction_id?: number }[];
 }
@@ -38,6 +40,7 @@ interface Session {
     total_energy: number | null;
     stop_reason: string | null;
     id_tag: string;
+    renter_name?: string | null;
 }
 
 interface Log {
@@ -57,6 +60,44 @@ interface Reading {
     phase?: string;
     context?: string;
 }
+function formatTimeAgo(dateString: string | null | undefined): string {
+    if (!dateString) return "No heartbeat";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((date.getTime() - now.getTime()) / 1000);
+    
+    // Fallback logic for basic browsers if Intl.RelativeTimeFormat is not supported, 
+    // but it is in modern browsers.
+    const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+    
+    const absDiff = Math.abs(diffInSeconds);
+    if (absDiff < 60) return rtf.format(Math.sign(diffInSeconds) * absDiff, 'second');
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    const absDiffMin = Math.abs(diffInMinutes);
+    if (absDiffMin < 60) return rtf.format(Math.sign(diffInMinutes) * absDiffMin, 'minute');
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    const absDiffHours = Math.abs(diffInHours);
+    if (absDiffHours < 24) return rtf.format(Math.sign(diffInHours) * absDiffHours, 'hour');
+    const diffInDays = Math.floor(diffInHours / 24);
+    return rtf.format(Math.sign(diffInDays) * Math.abs(diffInDays), 'day');
+}
+
+function formatDuration(start: string, end: string | null): string {
+    const startTime = new Date(start).getTime();
+    const endTime = end ? new Date(end).getTime() : new Date().getTime();
+    const diffInSeconds = Math.floor((endTime - startTime) / 1000);
+
+    const hours = Math.floor(diffInSeconds / 3600);
+    const minutes = Math.floor((diffInSeconds % 3600) / 60);
+    const seconds = diffInSeconds % 60;
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+
+    return parts.join(' ');
+}
 
 export default function ChargerDetail() {
     const { id } = useParams();
@@ -72,6 +113,11 @@ export default function ChargerDetail() {
     const [sessionReadings, setSessionReadings] = useState<Reading[]>([]);
     const [readingsLoading, setReadingsLoading] = useState(false);
     const [showLogsModal, setShowLogsModal] = useState(false);
+    const [hiddenSeries, setHiddenSeries] = useState<Record<string, boolean>>({});
+    const [selectedLogDate, setSelectedLogDate] = useState(() => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    });
 
     useEffect(() => {
         if (!id) return;
@@ -83,20 +129,34 @@ export default function ChargerDetail() {
     const fetchData = async () => {
         if (!id) return;
         try {
-            const [resCharger, resSessions, resLogs] = await Promise.all([
+            const [resCharger, resSessions] = await Promise.all([
                 axios.get(`/api/admin/chargers/${id}`),
-                axios.get(`/api/admin/chargers/${id}/sessions`),
-                axios.get(`/api/admin/chargers/${id}/logs`)
+                axios.get(`/api/admin/chargers/${id}/sessions`)
             ]);
             setCharger(resCharger.data);
             setSessions(resSessions.data);
-            setLogs(resLogs.data);
         } catch (error) {
             console.error("Error fetching charger details", error);
         } finally {
             setLoading(false);
         }
     };
+
+    const fetchLogs = async (date: string) => {
+        if (!id) return;
+        try {
+            const res = await axios.get(`/api/admin/chargers/${id}/logs?date=${date}`);
+            setLogs(res.data);
+        } catch (error) {
+            console.error("Error fetching logs", error);
+        }
+    };
+
+    useEffect(() => {
+        if (showLogsModal && id) {
+            fetchLogs(selectedLogDate);
+        }
+    }, [showLogsModal, selectedLogDate, id]);
 
     const toggleKioskMode = async () => {
         if (!charger) return;
@@ -112,6 +172,7 @@ export default function ChargerDetail() {
     const openSessionModal = async (session: Session) => {
         setSelectedSession(session);
         setReadingsLoading(true);
+        setHiddenSeries({});
         try {
             // Use session.transaction_id as per API
             const res = await axios.get(`/api/admin/sessions/${session.transaction_id}/readings`);
@@ -122,6 +183,43 @@ export default function ChargerDetail() {
             setReadingsLoading(false);
         }
     };
+
+    const handleLegendClick = (e: any) => {
+        const seriesName = e.dataKey;
+        setHiddenSeries(prev => ({
+            ...prev,
+            [seriesName]: !prev[seriesName]
+        }));
+    };
+
+    const chartDataMemo = useMemo(() => {
+        const pivotedDataMap = new Map<string, any>();
+        const unitsMap = new Set<string>();
+        const seriesUnitMap = new Map<string, string>();
+
+        sessionReadings.forEach(r => {
+            const keyParts = [r.measurand, r.phase].filter(Boolean);
+            const key = keyParts.length > 0 ? keyParts.join(" - ") : "Value";
+            
+            const seriesKey = r.unit ? `${key} (${r.unit})` : key;
+            const unit = r.unit || 'default';
+            
+            unitsMap.add(unit);
+            seriesUnitMap.set(seriesKey, unit);
+
+            if (!pivotedDataMap.has(r.timestamp)) {
+                pivotedDataMap.set(r.timestamp, { timestamp: r.timestamp });
+            }
+            const dataPoint = pivotedDataMap.get(r.timestamp);
+            dataPoint[seriesKey] = r.value;
+        });
+
+        const chartData = Array.from(pivotedDataMap.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const uniqueUnits = Array.from(unitsMap);
+        if (uniqueUnits.length === 0) uniqueUnits.push('default');
+        
+        return { chartData, uniqueUnits, seriesUnitMap };
+    }, [sessionReadings]);
 
     const handleConnectorClick = (conn: { connector_id: number; status: string; current_transaction_id?: number }) => {
         if (conn.current_transaction_id) {
@@ -140,7 +238,8 @@ export default function ChargerDetail() {
                     meter_stop: null,
                     total_energy: 0,
                     stop_reason: null,
-                    id_tag: "Unknown"
+                    id_tag: "Unknown",
+                    renter_name: "Unknown"
                 });
             }
         }
@@ -247,7 +346,7 @@ export default function ChargerDetail() {
                         </CardContent>
                     </Card>
                     <Card
-                        className="cursor-pointer hover:shadow-md transition-all border-l-4 border-l-purple-500"
+                        className="cursor-pointer hover:shadow-md transition-all border-l-4 border-l-purple-500 flex flex-col justify-between"
                         onClick={() => setShowLogsModal(true)}
                     >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -255,8 +354,8 @@ export default function ChargerDetail() {
                             <FileText className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{logs.length}</div>
-                            <p className="text-xs text-muted-foreground">Click to view all logs</p>
+                            <div className="text-xl font-bold">{formatTimeAgo(charger.last_heartbeat)}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Click to view logs by date</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -273,8 +372,11 @@ export default function ChargerDetail() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Start Time</TableHead>
+                                        <TableHead>End Time</TableHead>
+                                        <TableHead>Duration</TableHead>
                                         <TableHead>Tx ID</TableHead>
                                         <TableHead>Energy (kWh)</TableHead>
+                                        <TableHead>Renter</TableHead>
                                         <TableHead>Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -288,9 +390,18 @@ export default function ChargerDetail() {
                                             <TableCell className="text-xs whitespace-nowrap">
                                                 {new Date(s.start_time).toLocaleString()}
                                             </TableCell>
+                                            <TableCell className="text-xs whitespace-nowrap">
+                                                {s.end_time ? new Date(s.end_time).toLocaleString() : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-xs whitespace-nowrap">
+                                                {formatDuration(s.start_time, s.end_time)}
+                                            </TableCell>
                                             <TableCell className="font-mono text-xs">{s.transaction_id}</TableCell>
                                             <TableCell>
                                                 {s.total_energy ? s.total_energy.toFixed(3) : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-xs">
+                                                {s.renter_name || "Unknown"}
                                             </TableCell>
                                             <TableCell>
                                                 {s.end_time ? (
@@ -321,7 +432,7 @@ export default function ChargerDetail() {
                                 </div>
                             ) : sessionReadings.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={sessionReadings}>
+                                    <LineChart data={chartDataMemo.chartData}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="timestamp"
@@ -329,12 +440,17 @@ export default function ChargerDetail() {
                                             stroke="#888888"
                                             fontSize={12}
                                         />
-                                        <YAxis
-                                            stroke="#888888"
-                                            fontSize={12}
-                                            // Auto-scale Y axis
-                                            domain={['auto', 'auto']}
-                                        />
+                                        {chartDataMemo.uniqueUnits.map((unit, index) => (
+                                            <YAxis
+                                                key={unit}
+                                                yAxisId={unit}
+                                                orientation={index % 2 === 0 ? "left" : "right"}
+                                                stroke="#888888"
+                                                fontSize={12}
+                                                domain={['auto', 'auto']}
+                                                label={{ value: unit !== 'default' ? unit : '', angle: -90, position: 'insideLeft', offset: 10 }}
+                                            />
+                                        ))}
                                         <Tooltip
                                             labelFormatter={(str: string) => new Date(str).toLocaleString()}
                                             content={({ active, payload, label }: { active?: boolean, payload?: any[], label?: string }) => {
@@ -354,43 +470,26 @@ export default function ChargerDetail() {
                                                 return null;
                                             }}
                                         />
-                                        <Legend />
-                                        {/* Dynamically generate lines for each series */}
-                                        {(() => {
-                                            // Group data by Series Key: Measurand + Phase + Context
-                                            // Recharts needs an array of objects where each object is a timestamp point
-                                            // But here our API returns a flat list where each row is one reading.
-                                            // Since we use 'value' as dataKey, we might need multiple passes or simple filtering if we want to use the simpler API.
-
-                                            // Actually, the simplest way with loose data in Recharts is to filter the data for the specific line 
-                                            // provided that we don't strictly align X-axis points (connectNulls helps). 
-                                            // However, proper way is to pivot data if timestamps align, or just render multiple lines 
-                                            // each filtering the main dataset? No, Recharts 'data' prop is global.
-
-                                            // Better approach: We transform the flat list into unique Series on the fly.
-                                            const seriesMap = new Map<string, Reading[]>();
-                                            sessionReadings.forEach(r => {
-                                                const key = [r.measurand, r.phase, r.unit].filter(Boolean).join(" - ") || "Value";
-                                                if (!seriesMap.has(key)) seriesMap.set(key, []);
-                                                seriesMap.get(key)!.push(r);
-                                            });
-
+                                        <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: 'pointer' }} />
+                                        <Brush dataKey="timestamp" height={30} stroke="#8884d8" tickFormatter={(str: string) => new Date(str).toLocaleTimeString()} />
+                                        
+                                        {Array.from(chartDataMemo.seriesUnitMap.entries()).map(([key, unit], index) => {
                                             const colors = ["#2563eb", "#dc2626", "#16a34a", "#ca8a04", "#9333ea", "#0891b2"];
-
-                                            return Array.from(seriesMap.entries()).map(([key, data], index) => (
+                                            return (
                                                 <Line
                                                     key={key}
-                                                    data={data} // Override data for this specific line
                                                     type="monotone"
-                                                    dataKey="value"
+                                                    dataKey={key}
                                                     name={key}
+                                                    yAxisId={unit}
+                                                    hide={hiddenSeries[key]}
                                                     stroke={colors[index % colors.length]}
                                                     dot={false}
                                                     strokeWidth={2}
                                                     connectNulls={true}
                                                 />
-                                            ));
-                                        })()}
+                                            );
+                                        })}
                                     </LineChart>
                                 </ResponsiveContainer>
                             ) : (
@@ -406,7 +505,15 @@ export default function ChargerDetail() {
                 <Dialog open={showLogsModal} onOpenChange={setShowLogsModal}>
                     <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
                         <DialogHeader>
-                            <DialogTitle>OCPP Logs</DialogTitle>
+                            <div className="flex items-center justify-between mr-8">
+                                <DialogTitle>OCPP Logs</DialogTitle>
+                                <input 
+                                    type="date"
+                                    className="border rounded px-2 py-1 text-sm dark:bg-gray-800 dark:border-gray-700 outline-none focus:ring-2 focus:ring-ring"
+                                    value={selectedLogDate}
+                                    onChange={(e) => setSelectedLogDate(e.target.value)}
+                                />
+                            </div>
                         </DialogHeader>
                         <div className="flex-1 overflow-auto bg-muted/20 p-2 rounded border">
                             <Table>

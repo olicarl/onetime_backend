@@ -172,6 +172,13 @@ def get_charger_sessions(charger_id: str, db: Session = Depends(get_db)):
              
         # Determine id_tag to display (prefer snapshot)
         display_id_tag = s.token_snapshot if s.token_snapshot else s.token_id
+        
+        # Determine renter name
+        renter_name = "Unknown"
+        if s.renter_name_snapshot:
+            renter_name = s.renter_name_snapshot
+        elif s.token_rel and s.token_rel.renter:
+            renter_name = s.token_rel.renter.name
              
         result.append(SessionLogItem(
             id=s.id,
@@ -182,25 +189,36 @@ def get_charger_sessions(charger_id: str, db: Session = Depends(get_db)):
             meter_stop=s.meter_stop,
             total_energy=total,
             stop_reason=s.stop_reason,
-            id_tag=display_id_tag
+            id_tag=display_id_tag,
+            renter_name=renter_name
         ))
     return result
 
 
 
 @router.get("/chargers/{charger_id}/logs", response_model=List[OcppLogItem])
-def get_charger_logs(charger_id: str, db: Session = Depends(get_db)):
+def get_charger_logs(charger_id: str, date: Optional[str] = None, db: Session = Depends(get_db)):
     # Import here to avoid circular dependencies if any, 
     # though models are in same file usually.
     from app.models import OcppMessageLog
     
-    logs = (
-        db.query(OcppMessageLog)
-        .filter(OcppMessageLog.station_id == charger_id)
-        .order_by(OcppMessageLog.timestamp.desc())
-        .limit(100)
-        .all()
-    )
+    query = db.query(OcppMessageLog).filter(OcppMessageLog.station_id == charger_id)
+    
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+            start_datetime = datetime.combine(target_date, datetime.min.time())
+            end_datetime = datetime.combine(target_date, datetime.max.time())
+            query = query.filter(
+                OcppMessageLog.timestamp >= start_datetime,
+                OcppMessageLog.timestamp <= end_datetime
+            )
+        except ValueError:
+            pass
+    else:
+        query = query.limit(100)
+        
+    logs = query.order_by(OcppMessageLog.timestamp.desc()).all()
     
     return [
         OcppLogItem(

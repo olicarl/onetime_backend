@@ -66,6 +66,7 @@ class SessionLogItem(BaseModel):
     total_energy: float | None
     stop_reason: str | None
     id_tag: str | None = None
+    renter_name: str | None = None
 
 class OcppLogItem(BaseModel):
     id: int
