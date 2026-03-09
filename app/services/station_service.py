@@ -138,6 +138,32 @@ class StationService:
         finally:
             db.close()
 
+    async def has_unknown_connector_status(self, charger_id: str) -> bool:
+        """
+        Check if the station has any connectors with Unknown status, 
+        or if it has no connectors registered at all.
+        """
+        db: Session = SessionLocal()
+        try:
+            connectors = db.query(StationConnector).filter(
+                StationConnector.station_id == charger_id
+            ).all()
+
+            if not connectors:
+                return True
+
+            for connector in connectors:
+                if connector.status == ChargingStationStatus.Unknown:
+                    return True
+
+            return False
+        except Exception as e:
+            logger.error(f"Error checking connector status for {charger_id}: {e}")
+            # If error, default to true to try and sync status
+            return True
+        finally:
+            db.close()
+
     async def sync_active_stations(self, active_ids: list[str]):
         db: Session = SessionLocal()
         try:

@@ -45,6 +45,8 @@ class SocketAdapter:
     async def send(self, msg):
         await self._ws.send_text(msg)
 
+import asyncio
+
 @app.websocket("/ocpp/{charge_point_id}")
 async def on_connect(websocket: WebSocket, charge_point_id: str):
     await manager.connect(charge_point_id, websocket)
@@ -54,6 +56,20 @@ async def on_connect(websocket: WebSocket, charge_point_id: str):
     # Store the ChargePoint instance on the WebSocket object 
     # so we can retrieve it for outgoing commands (Rule C implementation)
     websocket.charge_point = cp
+    
+    # Trigger a StatusNotification shortly after connection
+    async def trigger_status():
+        await asyncio.sleep(2) # Give it a moment to stabilize
+        try:
+            if await station_service.has_unknown_connector_status(charge_point_id):
+                logger.info(f"Unknown status detected. Triggering StatusNotification for {charge_point_id} on reconnect.")
+                await cp.trigger_message(requested_message="StatusNotification")
+            else:
+                logger.info(f"Status already known for {charge_point_id}. Skipping StatusNotification trigger.")
+        except Exception as e:
+            logger.error(f"Failed to trigger StatusNotification for {charge_point_id}: {e}")
+            
+    asyncio.create_task(trigger_status())
     
     try:
         await cp.start()
