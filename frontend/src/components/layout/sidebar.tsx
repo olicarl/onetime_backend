@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, LogOut, Users, UserCircle, MapPin, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, Users, UserCircle, MapPin, Settings, FileText } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +23,11 @@ export function Sidebar() {
             title: "Parking Spots",
             href: "/parking-spots",
             icon: MapPin,
+        },
+        {
+            title: "Billing",
+            href: "/billing",
+            icon: FileText,
         },
     ];
 

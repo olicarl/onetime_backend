@@ -25,6 +25,12 @@ class ChargingStationStatus(str, enum.Enum):
     Faulted = "Faulted"
     Unknown = "Unknown"
 
+class BillingPeriodicity(str, enum.Enum):
+    Monthly = "Monthly"
+    Quarterly = "Quarterly"
+    HalfYearly = "HalfYearly"
+    Yearly = "Yearly"
+
 # Models
 
 class User(Base):
@@ -117,9 +123,13 @@ class ChargingSession(Base):
     renter_name_snapshot = Column(String, nullable=True)
     renter_email_snapshot = Column(String, nullable=True)
 
+    # Billing relation
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True)
+
     station = relationship("ChargingStation", back_populates="sessions")
     token_rel = relationship("AuthorizationToken", back_populates="sessions")
     meter_readings = relationship("MeterReading", back_populates="session", cascade="all, delete-orphan")
+    invoice = relationship("Invoice", back_populates="sessions")
 
 
 class StationConnector(Base):
@@ -226,4 +236,29 @@ class RelaySettings(Base):
         
         f = Fernet(key.encode() if isinstance(key, str) else key)
         return f.decrypt(self.encrypted_token.encode()).decode()
+
+class BillingSettings(Base):
+    __tablename__ = "billing_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_name = Column(String, nullable=False)
+    iban = Column(String, nullable=False)
+    address = Column(String, nullable=False)
+    periodicity = Column(Enum(BillingPeriodicity), default=BillingPeriodicity.Monthly)
+    price_per_kwh = Column(Float, nullable=False, default=0.0)
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    renter_id = Column(Integer, ForeignKey("renters.id"), nullable=False)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    amount_due = Column(Float, nullable=False)
+    is_paid = Column(Boolean, default=False)
+    file_path = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    renter = relationship("Renter")
+    sessions = relationship("ChargingSession", back_populates="invoice")
 

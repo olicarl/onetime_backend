@@ -7,7 +7,54 @@ from app.services.transactions import transaction_service # Import to register e
 from app.middleware.auth import DualModeAuthMiddleware
 from app.routers import auth, admin
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy.orm import Session
+from datetime import datetime
+import asyncio
+
+from app.database import SessionLocal
+from app.models import Renter, BillingPeriodicity
+from app.services.billing_service import get_billing_settings, calculate_and_generate_invoice
+
 app = FastAPI(title="Onetime Backend", version="2.0.0")
+
+scheduler = AsyncIOScheduler()
+
+async def auto_billing_job():
+    logger.info("Running automatic billing background job...")
+    db: Session = SessionLocal()
+    try:
+        settings = get_billing_settings(db)
+        today = datetime.now()
+        
+        # Check if today is the end of a period
+        is_end_of_period = False
+        
+        if settings.periodicity == BillingPeriodicity.Monthly and today.day == 1:
+            is_end_of_period = True
+        elif settings.periodicity == BillingPeriodicity.Quarterly and today.month in [1, 4, 7, 10] and today.day == 1:
+            is_end_of_period = True
+        elif settings.periodicity == BillingPeriodicity.HalfYearly and today.month in [1, 7] and today.day == 1:
+            is_end_of_period = True
+        elif settings.periodicity == BillingPeriodicity.Yearly and today.month == 1 and today.day == 1:
+            is_end_of_period = True
+            
+        if is_end_of_period:
+            renters = db.query(Renter).filter(Renter.is_active == True).all()
+            for renter in renters:
+                try:
+                    invoice = calculate_and_generate_invoice(db, renter, today)
+                    if invoice:
+                        logger.info(f"Automatically generated invoice {invoice.id} for renter {renter.name}")
+                except Exception as e:
+                    logger.error(f"Failed to generate automatic invoice for renter {renter.name}: {e}")
+        else:
+            logger.info("Today is not the end of a configured billing period. No invoices generated.")
+    except Exception as e:
+        logger.error(f"Error in automatic billing job: {e}")
+    finally:
+        db.close()
 
 @app.get("/health")
 async def health_check():
@@ -30,10 +77,17 @@ async def startup():
     
     from app.services.watchdog import watchdog
     watchdog.start()
+    
+    # Schedule the auto_billing_job to run every day at 00:01
+    scheduler.add_job(auto_billing_job, CronTrigger(hour=0, minute=1))
+    scheduler.start()
+    logger.info("APScheduler started.")
 
 # Routes
 app.include_router(auth.router)
 app.include_router(admin.router)
+from app.routers import billing
+app.include_router(billing.router)
 
 class SocketAdapter:
     def __init__(self, websocket: WebSocket):

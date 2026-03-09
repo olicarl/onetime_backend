@@ -6,6 +6,7 @@ import ChargerDetail from "@/pages/ChargerDetail";
 import UsersPage from "@/pages/UsersPage";
 import RentersPage from "@/pages/RentersPage";
 import ParkingSpotsPage from "@/pages/ParkingSpotsPage";
+import BillingPage from "@/pages/BillingPage";
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
 
@@ -72,6 +73,14 @@ function App() {
             element={
               <PrivateRoute>
                 <ParkingSpotsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <PrivateRoute>
+                <BillingPage />
               </PrivateRoute>
             }
           />
