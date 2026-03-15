@@ -29,6 +29,11 @@ export function Sidebar() {
             href: "/billing",
             icon: FileText,
         },
+        {
+            title: "Settings",
+            href: "/settings",
+            icon: Settings,
+        },
     ];
 
     return (
@@ -64,11 +69,6 @@ export function Sidebar() {
                             <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
                         </div>
                     </div>
-                    <Link to="/users">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Settings className="h-4 w-4" />
-                        </Button>
-                    </Link>
                 </div>
                 <Button
                     variant="ghost"

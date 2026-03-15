@@ -10,7 +10,7 @@ from app.models import BillingSettings, Invoice, Renter, BillingPeriodicity
 from app.services.billing_service import get_billing_settings, calculate_and_generate_invoice
 from fastapi.responses import FileResponse
 
-router = APIRouter(prefix="/billing", tags=["billing"])
+router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 class BillingSettingsSchema(BaseModel):
     company_name: str
