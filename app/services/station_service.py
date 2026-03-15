@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.database import get_db, SessionLocal
 from app.models import ChargingStation, BootLog, StationConnector, ChargingStationStatus
@@ -51,7 +51,7 @@ class StationService:
             return {
                 "status": "Accepted",
                 "interval": 300,
-                "current_time": datetime.utcnow().isoformat() + "Z"
+                "current_time": datetime.now(timezone.utc).isoformat()
             }
         except Exception as e:
             logger.error(f"Error processing boot for {charger_id}: {e}")
@@ -64,11 +64,26 @@ class StationService:
         try:
             station = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
             if station:
-                station.last_heartbeat = datetime.utcnow()
+                now = datetime.now(timezone.utc)
+                station.last_heartbeat = now
+                station.last_seen = now
                 station.is_online = True
                 db.commit()
             
-            return {"current_time": datetime.utcnow().isoformat() + "Z"}
+            return {"current_time": datetime.now(timezone.utc).isoformat()}
+        finally:
+            db.close()
+
+    async def update_last_seen(self, charger_id: str):
+        db: Session = SessionLocal()
+        try:
+            station = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+            if station:
+                station.last_seen = datetime.now(timezone.utc)
+                station.is_online = True
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error updating last_seen for {charger_id}: {e}")
         finally:
             db.close()
 
@@ -90,7 +105,7 @@ class StationService:
             
             connector.status = status
             connector.error_code = error_code
-            connector.last_updated = datetime.utcnow()
+            connector.last_updated = datetime.now(timezone.utc)
             
             db.commit()
         except Exception as e:

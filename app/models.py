@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Enum, JSON
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 from app.database import Base
 
@@ -49,7 +49,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, default="admin", nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_admin = Column(Boolean, default=True)  # For simplicity, all users are admins initially
 
 class Renter(Base):
@@ -60,7 +60,7 @@ class Renter(Base):
     contact_email = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     prepaid_balance_kwh = Column(Float, default=0.0, nullable=False)
 
     parking_spots = relationship("ParkingSpot", back_populates="renter")
@@ -88,6 +88,7 @@ class ChargingStation(Base):
     is_online = Column(Boolean, default=False)
     kiosk_mode = Column(Boolean, default=False)
     last_heartbeat = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, nullable=True)
     model = Column(String, nullable=True)
     vendor = Column(String, nullable=True)
     firmware_version = Column(String, nullable=True)
@@ -150,7 +151,7 @@ class StationConnector(Base):
     connector_id = Column(Integer, primary_key=True)
     status = Column(Enum(ChargingStationStatus), default=ChargingStationStatus.Unavailable)
     error_code = Column(String, default="NoError")
-    last_updated = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     station = relationship("ChargingStation", back_populates="connectors")
 
@@ -186,7 +187,7 @@ class BootLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     station_id = Column(String, ForeignKey("charging_stations.id"), nullable=False)
-    boot_time = Column(DateTime, default=datetime.utcnow)
+    boot_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     model = Column(String, nullable=True)
     vendor = Column(String, nullable=True)
     firmware_version = Column(String, nullable=True)
@@ -204,7 +205,7 @@ class OcppMessageLog(Base):
     action = Column(String, nullable=False) # e.g. BootNotification
     direction = Column(String, nullable=False) # Incoming, Outgoing
     payload = Column(JSON, nullable=True) # The JSON payload
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     station = relationship("ChargingStation", back_populates="ocpp_logs")
 
@@ -216,8 +217,8 @@ class RelaySettings(Base):
     enabled = Column(Boolean, default=False, nullable=False)
     encrypted_token = Column(String, nullable=True)
     relay_url = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def set_token(self, token: str):
         """Encrypt and store token"""
@@ -269,7 +270,7 @@ class Invoice(Base):
     amount_due = Column(Float, nullable=False)
     is_paid = Column(Boolean, default=False)
     file_path = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     renter = relationship("Renter")
     sessions = relationship("ChargingSession", back_populates="invoice")
@@ -282,7 +283,7 @@ class PrepaidTransaction(Base):
     transaction_id = Column(Integer, ForeignKey("charging_sessions.transaction_id"), nullable=True)
     amount_kwh = Column(Float, nullable=False)
     type = Column(Enum(PrepaidTransactionType), nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     renter = relationship("Renter", back_populates="prepaid_transactions")
     session = relationship("ChargingSession", back_populates="prepaid_transactions")

@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, BatteryCharging, History as HistoryIcon, FileText, PlugZap } from "lucide-react";
+import { ArrowLeft, Loader2, BatteryCharging, History as HistoryIcon, FileText, PlugZap, Heart, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
     XAxis,
@@ -26,6 +26,7 @@ interface ChargerDetail {
     is_online: boolean;
     kiosk_mode: boolean;
     last_heartbeat?: string | null;
+    last_seen?: string | null;
     parking_spot_label: string | null;
     connectors: { connector_id: number; status: string; current_transaction_id?: number }[];
 }
@@ -60,9 +61,16 @@ interface Reading {
     phase?: string;
     context?: string;
 }
+function parseServerDate(dateString: string | null | undefined): Date | null {
+    if (!dateString) return null;
+    // If the string doesn't end with Z or have an offset, assume it is UTC
+    const hasTimezone = dateString.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(dateString);
+    return new Date(hasTimezone ? dateString : dateString + 'Z');
+}
+
 function formatTimeAgo(dateString: string | null | undefined): string {
-    if (!dateString) return "No heartbeat";
-    const date = new Date(dateString);
+    const date = parseServerDate(dateString);
+    if (!date) return "No heartbeat";
     const now = new Date();
     const diffInSeconds = Math.floor((date.getTime() - now.getTime()) / 1000);
     
@@ -83,8 +91,13 @@ function formatTimeAgo(dateString: string | null | undefined): string {
 }
 
 function formatDuration(start: string, end: string | null): string {
-    const startTime = new Date(start).getTime();
-    const endTime = end ? new Date(end).getTime() : new Date().getTime();
+    const startDate = parseServerDate(start);
+    const endDate = end ? parseServerDate(end) : new Date();
+    
+    if (!startDate || !endDate) return "-";
+    
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
     const diffInSeconds = Math.floor((endTime - startTime) / 1000);
 
     const hours = Math.floor(diffInSeconds / 3600);
@@ -377,9 +390,18 @@ export default function ChargerDetail() {
                             <CardTitle className="text-sm font-medium">OCPP Logs</CardTitle>
                             <FileText className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-xl font-bold">{formatTimeAgo(charger.last_heartbeat)}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Click to view logs by date</p>
+                        <CardContent className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Heart className="h-4 w-4 text-red-500" />
+                                <span className="text-sm font-bold">{formatTimeAgo(charger.last_heartbeat)}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">Heartbeat</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <ArrowDown className="h-4 w-4 text-blue-500" />
+                                <span className="text-sm font-bold">{formatTimeAgo(charger.last_seen)}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">Last Activity</span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-2 italic">Click to view logs</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -413,10 +435,10 @@ export default function ChargerDetail() {
                                             onClick={() => openSessionModal(s)}
                                         >
                                             <TableCell className="text-xs whitespace-nowrap">
-                                                {new Date(s.start_time).toLocaleString()}
+                                                {parseServerDate(s.start_time)?.toLocaleString()}
                                             </TableCell>
                                             <TableCell className="text-xs whitespace-nowrap">
-                                                {s.end_time ? new Date(s.end_time).toLocaleString() : "-"}
+                                                {s.end_time ? parseServerDate(s.end_time)?.toLocaleString() : "-"}
                                             </TableCell>
                                             <TableCell className="text-xs whitespace-nowrap">
                                                 {formatDuration(s.start_time, s.end_time)}
@@ -477,7 +499,7 @@ export default function ChargerDetail() {
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="timestamp"
-                                            tickFormatter={(str: string) => new Date(str).toLocaleTimeString()}
+                                            tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString() || ""}
                                             stroke="#888888"
                                             fontSize={12}
                                         />
@@ -493,12 +515,12 @@ export default function ChargerDetail() {
                                             />
                                         ))}
                                         <Tooltip
-                                            labelFormatter={(str: string) => new Date(str).toLocaleString()}
+                                            labelFormatter={(str: string) => parseServerDate(str)?.toLocaleString() || ""}
                                             content={({ active, payload, label }: { active?: boolean, payload?: any[], label?: string }) => {
                                                 if (active && payload && payload.length) {
                                                     return (
                                                         <div className="bg-white border rounded p-2 shadow-sm text-sm dark:bg-gray-800 dark:border-gray-700">
-                                                            <p className="font-semibold mb-1">{label ? new Date(label).toLocaleString() : ''}</p>
+                                                            <p className="font-semibold mb-1">{label ? parseServerDate(label)?.toLocaleString() : ''}</p>
                                                             {payload.map((entry: any, index: number) => (
                                                                 <div key={index} className="flex items-center gap-2" style={{ color: entry.color }}>
                                                                     <span>{entry.name}:</span>
@@ -512,7 +534,7 @@ export default function ChargerDetail() {
                                             }}
                                         />
                                         <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: 'pointer' }} />
-                                        <Brush dataKey="timestamp" height={30} stroke="#8884d8" tickFormatter={(str: string) => new Date(str).toLocaleTimeString()} />
+                                        <Brush dataKey="timestamp" height={30} stroke="#8884d8" tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString() || ""} />
                                         
                                         {Array.from(chartDataMemo.seriesUnitMap.entries()).map(([key, unit], index) => {
                                             const colors = ["#2563eb", "#dc2626", "#16a34a", "#ca8a04", "#9333ea", "#0891b2"];
@@ -570,7 +592,7 @@ export default function ChargerDetail() {
                                     {logs.map(log => (
                                         <TableRow key={log.id}>
                                             <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
-                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                                {parseServerDate(log.timestamp)?.toLocaleTimeString()}
                                             </TableCell>
                                             <TableCell>
                                                 {log.direction === "Incoming" ? (

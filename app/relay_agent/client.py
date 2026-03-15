@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 import httpx
 import websockets
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger("relay_agent")
 
@@ -44,7 +44,7 @@ class RelayClient:
                 ping_timeout=10
             )
             self.connected = True
-            self.connected_at = datetime.utcnow()
+            self.connected_at = datetime.now(timezone.utc)
             self.last_error = None
             logger.info("Connected to relay server")
             return True

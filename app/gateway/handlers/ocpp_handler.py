@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from ocpp.v16 import ChargePoint as v16ChargePoint
 from ocpp.v16 import call
 from ocpp.v16 import call_result
@@ -42,6 +42,9 @@ class ChargePoint(v16ChargePoint):
                 action=action,
                 payload=payload
             )
+            
+            # Update last_seen on any incoming activity
+            await station_service.update_last_seen(self.id)
         except Exception as e:
             logger.error(f"Error logging incoming message: {e}")
             
@@ -120,7 +123,7 @@ class ChargePoint(v16ChargePoint):
         logger.info(f"Received Heartbeat from {self.id}")
         response = await station_service.heartbeat(charger_id=self.id, **kwargs)
         return call_result.Heartbeat(
-            current_time=response.get("current_time", datetime.utcnow().isoformat())
+            current_time=response.get("current_time", datetime.now(timezone.utc).isoformat())
         )
 
     @on(Action.start_transaction)

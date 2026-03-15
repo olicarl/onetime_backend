@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import AuthorizationToken, AuthorizationStatus, ChargingStation
@@ -42,7 +42,7 @@ class AuthorizationService:
                 logger.warning(f"Token {id_tag} status: {token.status}")
                 return {"id_tag_info": {"status": token.status}}
             
-            if token.expiry_date and token.expiry_date < datetime.utcnow():
+            if token.expiry_date and token.expiry_date < datetime.now(timezone.utc):
                  logger.warning(f"Token {id_tag} expired on {token.expiry_date}")
                  return {"id_tag_info": {"status": "Expired"}}
 

@@ -32,6 +32,7 @@ class ChargerDashboardItem(BaseModel):
     vendor: str | None
     model: str | None
     is_online: bool
+    last_seen: Optional[datetime] = None
     kiosk_mode: bool = False
     parking_spot_label: str | None
     parking_spot_id: int | None
@@ -52,6 +53,7 @@ class ChargerDetail(BaseModel):
     is_online: bool
     kiosk_mode: bool = False
     last_heartbeat: datetime | None = None
+    last_seen: datetime | None = None
     parking_spot_label: str | None = None
     parking_spot_id: int | None = None # Added for easier edit binding
     connectors: List[ConnectorStatus]

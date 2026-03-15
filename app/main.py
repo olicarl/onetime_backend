@@ -10,12 +10,13 @@ from app.routers import auth, admin
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 
 from app.database import SessionLocal
 from app.models import Renter, BillingPeriodicity
 from app.services.billing_service import get_billing_settings, calculate_and_generate_invoice
+from app.services.station_service import station_service
 
 app = FastAPI(title="Onetime Backend", version="2.0.0")
 
@@ -26,7 +27,7 @@ async def auto_billing_job():
     db: Session = SessionLocal()
     try:
         settings = get_billing_settings(db)
-        today = datetime.now()
+        today = datetime.now(timezone.utc)
         
         # Check if today is the end of a period
         is_end_of_period = False
