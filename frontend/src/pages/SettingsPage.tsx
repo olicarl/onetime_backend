@@ -13,10 +13,11 @@ interface BillingSettings {
     address: string;
     periodicity: string;
     price_per_kwh: number;
+    billing_mode: string;
 }
 
 export default function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<"billing">("billing");
+    const [activeTab, setActiveTab] = useState<"general" | "postpaid">("general");
     const [loading, setLoading] = useState(true);
 
     const [settings, setSettings] = useState<BillingSettings>({
@@ -24,7 +25,8 @@ export default function SettingsPage() {
         iban: "",
         address: "",
         periodicity: "Monthly",
-        price_per_kwh: 0
+        price_per_kwh: 0,
+        billing_mode: "Postpaid"
     });
 
     useEffect(() => {
@@ -51,9 +53,13 @@ export default function SettingsPage() {
             });
             alert("Settings saved successfully!");
             fetchData();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to save settings", error);
-            alert("Failed to save settings");
+            if (error.response?.data?.detail) {
+                alert(`Failed to save settings: ${error.response.data.detail}`);
+            } else {
+                alert("Failed to save settings");
+            }
         }
     };
 
@@ -68,13 +74,22 @@ export default function SettingsPage() {
                 <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex space-x-8">
                         <button
-                            onClick={() => setActiveTab("billing")}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === "billing"
+                            onClick={() => setActiveTab("general")}
+                            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === "general"
                                 ? "border-primary text-primary"
                                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                                 }`}
                         >
-                            Billing settings for debt based billing
+                            General
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("postpaid")}
+                            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === "postpaid"
+                                ? "border-primary text-primary"
+                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                                }`}
+                        >
+                            Postpaid
                         </button>
                     </div>
                 </div>
@@ -83,10 +98,32 @@ export default function SettingsPage() {
                     <div className="flex justify-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />
                     </div>
-                ) : activeTab === "billing" ? (
+                ) : activeTab === "general" ? (
                     <Card className="max-w-2xl">
                         <CardHeader>
-                            <CardTitle>Global Billing Configuration</CardTitle>
+                            <CardTitle>General Settings</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid gap-2">
+                                <Label htmlFor="billing_mode">Billing Mode</Label>
+                                <select
+                                    id="billing_mode"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    value={settings.billing_mode}
+                                    onChange={(e) => setSettings({ ...settings, billing_mode: e.target.value })}
+                                >
+                                    <option value="Postpaid">Postpaid (Invoice after charging)</option>
+                                    <option value="Prepaid">Prepaid (Pay in advance)</option>
+                                </select>
+                                <p className="text-xs text-muted-foreground">Changing the billing mode requires that no charging sessions are currently active.</p>
+                            </div>
+                            <Button onClick={handleSaveSettings}>Save Configuration</Button>
+                        </CardContent>
+                    </Card>
+                ) : activeTab === "postpaid" ? (
+                    <Card className="max-w-2xl">
+                        <CardHeader>
+                            <CardTitle>Postpaid Configuration</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="grid gap-2">

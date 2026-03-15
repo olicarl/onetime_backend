@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Download, FileText, CheckCircle2 } from "lucide-react";
+import { Loader2, Download, FileText, CheckCircle2, PlusCircle, History } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -27,6 +27,7 @@ interface Renter {
     id: number;
     name: string;
     contact_email: string;
+    prepaid_balance_kwh: number;
 }
 
 // Removed BillingSettings interface
@@ -47,6 +48,7 @@ export default function BillingPage() {
     
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [renters, setRenters] = useState<Renter[]>([]);
+    const [billingMode, setBillingMode] = useState<string>("Postpaid");
 
     // Manual invoice modal states
     const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -56,6 +58,17 @@ export default function BillingPage() {
     });
     const [generating, setGenerating] = useState(false);
 
+    // Prepaid Modals
+    const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+    const [selectedRenterForTopUp, setSelectedRenterForTopUp] = useState<Renter | null>(null);
+    const [topUpAmount, setTopUpAmount] = useState<number>(0);
+    const [toppingUp, setToppingUp] = useState(false);
+
+    const [historyModalOpen, setHistoryModalOpen] = useState(false);
+    const [selectedRenterForHistory, setSelectedRenterForHistory] = useState<Renter | null>(null);
+    const [prepaidHistory, setPrepaidHistory] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -63,12 +76,14 @@ export default function BillingPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [invoicesRes, rentersRes] = await Promise.all([
+            const [invoicesRes, rentersRes, settingsRes] = await Promise.all([
                 axios.get("/api/billing/invoices"),
-                axios.get("/api/admin/renters")
+                axios.get("/api/admin/renters"),
+                axios.get("/api/billing/settings")
             ]);
             setInvoices(invoicesRes.data);
             setRenters(rentersRes.data);
+            setBillingMode(settingsRes.data.billing_mode || "Postpaid");
         } catch (error) {
             console.error("Failed to fetch billing data", error);
         } finally {
@@ -123,22 +138,65 @@ export default function BillingPage() {
         }
     };
 
+    const handleTopUp = async () => {
+        if (!selectedRenterForTopUp || topUpAmount <= 0) {
+            alert("Please enter a valid amount.");
+            return;
+        }
+        setToppingUp(true);
+        try {
+            await axios.post(`/api/billing/renters/${selectedRenterForTopUp.id}/topup`, {
+                amount_kwh: topUpAmount
+            });
+            alert("Top-up successful!");
+            setTopUpModalOpen(false);
+            fetchData(); // Refresh balances
+        } catch (error: any) {
+            console.error("Top up failed", error);
+            alert(error.response?.data?.detail || "Top up failed");
+        } finally {
+            setToppingUp(false);
+        }
+    };
+
+    const openHistory = async (renter: Renter) => {
+        setSelectedRenterForHistory(renter);
+        setHistoryModalOpen(true);
+        setHistoryLoading(true);
+        try {
+            const res = await axios.get(`/api/billing/renters/${renter.id}/prepaid-details`);
+            setPrepaidHistory(res.data.history || []);
+        } catch (error) {
+            console.error("Failed to load history", error);
+            setPrepaidHistory([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
     return (
         <div className="flex min-h-screen">
             <Sidebar />
             <main className="flex-1 p-8 bg-gray-50 dark:bg-gray-900">
                 <div className="flex items-center justify-between mb-8">
-                    <h2 className="text-3xl font-bold tracking-tight">Billing Management</h2>
-                    <Button onClick={() => setGenerateModalOpen(true)}>
-                        <FileText className="mr-2 h-4 w-4" /> Generate Invoice
-                    </Button>
+                    <div>
+                        <h2 className="text-3xl font-bold tracking-tight">Billing Management</h2>
+                        <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800">
+                            Mode: {billingMode}
+                        </span>
+                    </div>
+                    {billingMode === "Postpaid" && (
+                        <Button onClick={() => setGenerateModalOpen(true)}>
+                            <FileText className="mr-2 h-4 w-4" /> Generate Invoice
+                        </Button>
+                    )}
                 </div>
 
                 {loading ? (
                     <div className="flex justify-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />
                     </div>
-                ) : (
+                ) : billingMode === "Postpaid" ? (
                     <Card>
                         <CardHeader>
                             <CardTitle>Generated Invoices</CardTitle>
@@ -206,6 +264,65 @@ export default function BillingPage() {
                             </Table>
                         </CardContent>
                     </Card>
+                ) : (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Renter Prepaid Balances</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Renter Name</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Prepaid Balance (kWh)</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {renters.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                                                No renters found.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {renters.map(renter => (
+                                        <TableRow key={renter.id}>
+                                            <TableCell className="font-medium">{renter.name}</TableCell>
+                                            <TableCell>{renter.contact_email}</TableCell>
+                                            <TableCell>
+                                                <span className={`font-mono text-sm ${renter.prepaid_balance_kwh > 0 ? "text-green-600 font-bold" : "text-red-500"}`}>
+                                                    {renter.prepaid_balance_kwh.toFixed(2)} kWh
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="text-right space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => {
+                                                        setSelectedRenterForTopUp(renter);
+                                                        setTopUpAmount(0);
+                                                        setTopUpModalOpen(true);
+                                                    }}
+                                                >
+                                                    <PlusCircle className="mr-1 w-3 h-3" /> Top Up
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => openHistory(renter)}
+                                                >
+                                                    <History className="w-4 h-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 )}
                 
                 {/* Generate Manual Invoice Dialog */}
@@ -248,6 +365,89 @@ export default function BillingPage() {
                                 Generate Invoice
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Top Up Modal */}
+                <Dialog open={topUpModalOpen} onOpenChange={setTopUpModalOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Top Up Balance</DialogTitle>
+                            <DialogDescription>
+                                Add prepaid energy (kWh) to {selectedRenterForTopUp?.name}'s account.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="amount">Amount (kWh)</Label>
+                                <Input
+                                    id="amount"
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    value={topUpAmount}
+                                    onChange={(e) => setTopUpAmount(parseFloat(e.target.value))}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button onClick={handleTopUp} disabled={toppingUp}>
+                                {toppingUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Add Funds
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* History Modal */}
+                <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+                    <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                        <DialogHeader>
+                            <DialogTitle>Prepaid History - {selectedRenterForHistory?.name}</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex-1 overflow-auto mt-4">
+                            {historyLoading ? (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Amount (kWh)</TableHead>
+                                            <TableHead>Session ID</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {prepaidHistory.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                                                    No prepaid history found.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                        {prepaidHistory.map((txn, i) => (
+                                            <TableRow key={i}>
+                                                <TableCell className="text-sm">{new Date(txn.timestamp).toLocaleString()}</TableCell>
+                                                <TableCell>
+                                                    <span className={`px-2 py-1 text-xs font-semibold rounded ${txn.type === 'TopUp' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                                                        {txn.type}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="font-mono text-sm font-bold">
+                                                    {txn.type === 'TopUp' ? '+' : '-'}{txn.amount_kwh.toFixed(3)}
+                                                </TableCell>
+                                                <TableCell className="font-mono text-xs text-muted-foreground">
+                                                    {txn.transaction_id || "-"}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </div>
                     </DialogContent>
                 </Dialog>
             </main>

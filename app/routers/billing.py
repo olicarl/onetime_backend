@@ -5,10 +5,17 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 
-from app.database import get_db
-from app.models import BillingSettings, Invoice, Renter, BillingPeriodicity
+from app.database import SessionLocal
+from app.models import BillingSettings, Invoice, Renter, BillingPeriodicity, BillingMode, ChargingSession, PrepaidTransaction, PrepaidTransactionType
 from app.services.billing_service import get_billing_settings, calculate_and_generate_invoice
 from fastapi.responses import FileResponse
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
@@ -18,6 +25,7 @@ class BillingSettingsSchema(BaseModel):
     address: str
     periodicity: BillingPeriodicity
     price_per_kwh: float
+    billing_mode: BillingMode
 
     class Config:
         from_attributes = True
@@ -48,14 +56,77 @@ def api_get_billing_settings(db: Session = Depends(get_db)):
 @router.put("/settings", response_model=BillingSettingsSchema)
 def api_update_billing_settings(settings_data: BillingSettingsSchema, db: Session = Depends(get_db)):
     settings = get_billing_settings(db)
+    
+    if settings.billing_mode != settings_data.billing_mode:
+        # Prevent toggling if there is an active session
+        active_sessions = db.query(ChargingSession).filter(ChargingSession.end_time == None).count()
+        if active_sessions > 0:
+            raise HTTPException(status_code=400, detail="Cannot toggle billing mode while there are active charging sessions.")
+
     settings.company_name = settings_data.company_name
     settings.iban = settings_data.iban
     settings.address = settings_data.address
     settings.periodicity = settings_data.periodicity
     settings.price_per_kwh = settings_data.price_per_kwh
+    settings.billing_mode = settings_data.billing_mode
     db.commit()
     db.refresh(settings)
     return settings
+
+# --- Prepaid Endpoints ---
+
+class TopUpRequest(BaseModel):
+    amount_kwh: float
+
+class PrepaidTransactionSchema(BaseModel):
+    id: int
+    amount_kwh: float
+    type: str # 'TopUp' or 'Deduction'
+    timestamp: datetime
+    transaction_id: Optional[int]
+
+    class Config:
+        from_attributes = True
+
+class PrepaidDetailsSchema(BaseModel):
+    prepaid_balance_kwh: float
+    history: List[PrepaidTransactionSchema]
+
+@router.post("/renters/{renter_id}/topup")
+def top_up_renter_prepaid(renter_id: int, req: TopUpRequest, db: Session = Depends(get_db)):
+    renter = db.query(Renter).filter(Renter.id == renter_id).first()
+    if not renter:
+        raise HTTPException(status_code=404, detail="Renter not found")
+    
+    if req.amount_kwh <= 0:
+        raise HTTPException(status_code=400, detail="Top-up amount must be positive")
+
+    # Increase balance
+    renter.prepaid_balance_kwh += req.amount_kwh
+
+    # Record history
+    new_tx = PrepaidTransaction(
+        renter_id=renter.id,
+        amount_kwh=req.amount_kwh,
+        type=PrepaidTransactionType.TopUp
+    )
+    db.add(new_tx)
+    db.commit()
+    
+    return {"message": "Top-up successful", "new_balance_kwh": renter.prepaid_balance_kwh}
+
+@router.get("/renters/{renter_id}/prepaid-details", response_model=PrepaidDetailsSchema)
+def get_prepaid_details(renter_id: int, db: Session = Depends(get_db)):
+    renter = db.query(Renter).filter(Renter.id == renter_id).first()
+    if not renter:
+        raise HTTPException(status_code=404, detail="Renter not found")
+
+    history = db.query(PrepaidTransaction).filter(PrepaidTransaction.renter_id == renter_id).order_by(PrepaidTransaction.timestamp.desc()).all()
+    
+    return PrepaidDetailsSchema(
+        prepaid_balance_kwh=renter.prepaid_balance_kwh,
+        history=history
+    )
 
 
 @router.get("/invoices", response_model=List[InvoiceSchema])
@@ -77,7 +148,10 @@ def list_invoices(db: Session = Depends(get_db)):
 
 @router.post("/invoices/generate")
 def generate_manual_invoice(req: GenerateInvoiceRequest, db: Session = Depends(get_db)):
+    print(f"API received req.renter_id: {req.renter_id}, type {type(req.renter_id)}")
+    print(f"API using db session id: {id(db)}")
     renter = db.query(Renter).filter(Renter.id == req.renter_id).first()
+    print(f"API found renter: {renter}")
     if not renter:
         raise HTTPException(status_code=404, detail="Renter not found")
     

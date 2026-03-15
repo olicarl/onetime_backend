@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import ChargingSession, MeterReading, AuthorizationToken, ChargingStation
+from app.models import ChargingSession, MeterReading, AuthorizationToken, ChargingStation, BillingSettings, BillingMode, Renter, PrepaidTransaction, PrepaidTransactionType
 from app.config import logger
 from app.services.events import event_bus, Events
 
@@ -44,6 +44,17 @@ class TransactionService:
                  db.commit()
                  db.refresh(token)
             
+            # Check Prepaid Balance
+            renter = None
+            if token and token.renter_id:
+                renter = db.query(Renter).filter(Renter.id == token.renter_id).first()
+
+            billing_settings = db.query(BillingSettings).first()
+            if billing_settings and billing_settings.billing_mode == BillingMode.Prepaid:
+                if renter and renter.prepaid_balance_kwh <= 0:
+                    logger.warning(f"StartTransaction rejected for {id_tag}: Prepaid balance is {renter.prepaid_balance_kwh} kWh.")
+                    return {"transaction_id": 0, "id_tag_info": {"status": "Blocked"}}
+            
             # Create Session
             # We assume unique transaction_id comes from station or we generate one?
             # OCPP 1.6: Central System generates TransactionId (integer).
@@ -54,15 +65,12 @@ class TransactionService:
             # We need to construct the object first to flush and get ID? 
             # Or use a sequence. Let's rely on DB auto-increment for internal ID, but return that as transactionID.
             
-            # Get Renter info for snapshotting
+            # We already fetched renter above if available
             renter_name = None
             renter_email = None
-            if token and token.renter_id:
-                from app.models import Renter
-                renter = db.query(Renter).filter(Renter.id == token.renter_id).first()
-                if renter:
-                    renter_name = renter.name
-                    renter_email = renter.contact_email
+            if renter:
+                renter_name = renter.name
+                renter_email = renter.contact_email
 
             session = ChargingSession(
                 station_id=charger_id,
@@ -121,10 +129,30 @@ class TransactionService:
             session.meter_stop = meter_stop
             session.stop_reason = reason
             
-            # Calculate Energy
+            # Calculate Energy & Deduct if Prepaid
             if meter_stop >= session.meter_start:
                 consumed_wh = meter_stop - session.meter_start
                 session.total_energy_kwh = consumed_wh / 1000.0
+
+                # Preheat Deduction if Prepaid
+                billing_settings = db.query(BillingSettings).first()
+                if billing_settings and billing_settings.billing_mode == BillingMode.Prepaid and session.total_energy_kwh > 0:
+                    # Need renter to deduct
+                    token = db.query(AuthorizationToken).filter(AuthorizationToken.token == session.token_id).first()
+                    if token and token.renter_id:
+                        renter = db.query(Renter).filter(Renter.id == token.renter_id).first()
+                        if renter:
+                            # Deduct balance
+                            renter.prepaid_balance_kwh -= session.total_energy_kwh
+                            
+                            # Create deduction transaction record
+                            deduction_tx = PrepaidTransaction(
+                                renter_id=renter.id,
+                                transaction_id=session.transaction_id,
+                                amount_kwh=session.total_energy_kwh,
+                                type=PrepaidTransactionType.Deduction
+                            )
+                            db.add(deduction_tx)
             
             db.commit()
             logger.info(f"Stopped transaction {transaction_id}, consumed {session.total_energy_kwh} kWh")
@@ -177,6 +205,42 @@ class TransactionService:
             
              db.commit()
              logger.info(f"Saved {len(meter_values)} meter value records for {charger_id}")
+
+             # Prepaid Limit Check (Option 1)
+             latest_meter_val = None
+             for mv in meter_values:
+                 sampled_values = mv.get("sampled_value", [])
+                 for sv in sampled_values:
+                     if sv.get("measurand", "Energy.Active.Import.Register") == "Energy.Active.Import.Register":
+                         val = sv.get("value")
+                         if val is not None:
+                             try:
+                                 latest_meter_val = float(val)
+                             except ValueError:
+                                 pass
+                                 
+             if transaction_id and latest_meter_val is not None:
+                 session = db.query(ChargingSession).filter(
+                     ChargingSession.transaction_id == transaction_id, 
+                     ChargingSession.end_time == None
+                 ).first()
+                 
+                 if session:
+                     consumed_kwh = (latest_meter_val - session.meter_start) / 1000.0
+                     if consumed_kwh > 0:
+                         billing_settings = db.query(BillingSettings).first()
+                         if billing_settings and billing_settings.billing_mode == BillingMode.Prepaid:
+                             token = db.query(AuthorizationToken).filter(AuthorizationToken.token == session.token_id).first()
+                             if token and token.renter_id:
+                                 renter = db.query(Renter).filter(Renter.id == token.renter_id).first()
+                                 if renter and consumed_kwh >= renter.prepaid_balance_kwh:
+                                     logger.warning(f"Prepaid balance exceeded for transaction {transaction_id}. Consumed {consumed_kwh} kWh, Balance {renter.prepaid_balance_kwh} kWh. Triggering RemoteStop.")
+                                     from app.gateway.connection_manager import manager
+                                     import asyncio
+                                     websocket = manager.get_connection(charger_id)
+                                     if websocket and hasattr(websocket, 'charge_point'):
+                                         cp = websocket.charge_point
+                                         asyncio.create_task(cp.remote_stop_transaction(transaction_id=transaction_id))
 
         except Exception as e:
             logger.error(f"Error saving MeterValues: {e}")

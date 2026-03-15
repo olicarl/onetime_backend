@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, BatteryCharging, History, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, BatteryCharging, History as HistoryIcon, FileText, PlugZap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
     XAxis,
@@ -107,6 +107,7 @@ export default function ChargerDetail() {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [logs, setLogs] = useState<Log[]>([]);
     const [loading, setLoading] = useState(true);
+    const [stoppingSessionId, setStoppingSessionId] = useState<number | null>(null);
 
     // Modals
     const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -181,6 +182,29 @@ export default function ChargerDetail() {
             console.error("Error fetching readings", error);
         } finally {
             setReadingsLoading(false);
+        }
+    };
+
+    const handleRemoteStop = async (e: React.MouseEvent, transactionId: number) => {
+        e.stopPropagation();
+        if (!charger) return;
+        
+        if (!confirm(`Are you sure you want to stop transaction #${transactionId}?`)) {
+            return;
+        }
+
+        setStoppingSessionId(transactionId);
+        try {
+            await axios.post(`/api/admin/chargers/${charger.id}/remote-stop`, {
+                transaction_id: transactionId
+            });
+            alert("Remote stop command accepted");
+            fetchData();
+        } catch (error: any) {
+            console.error("Remote stop failed", error);
+            alert(error.response?.data?.detail || "Failed to remote stop charging session");
+        } finally {
+            setStoppingSessionId(null);
         }
     };
 
@@ -338,7 +362,7 @@ export default function ChargerDetail() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
-                            <History className="h-4 w-4 text-muted-foreground" />
+                            <HistoryIcon className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{sessions.length}</div>
@@ -378,6 +402,7 @@ export default function ChargerDetail() {
                                         <TableHead>Energy (kWh)</TableHead>
                                         <TableHead>Renter</TableHead>
                                         <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -409,6 +434,22 @@ export default function ChargerDetail() {
                                                 ) : (
                                                     <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded animate-pulse">Active</span>
                                                 )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {!s.end_time ? (
+                                                    <button 
+                                                        onClick={(e) => handleRemoteStop(e, s.transaction_id)}
+                                                        disabled={stoppingSessionId === s.transaction_id}
+                                                        className="inline-flex items-center text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                                                    >
+                                                        {stoppingSessionId === s.transaction_id ? (
+                                                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                        ) : (
+                                                            <PlugZap className="w-3 h-3 mr-1" />
+                                                        )}
+                                                        Stop
+                                                    </button>
+                                                ) : null}
                                             </TableCell>
                                         </TableRow>
                                     ))}

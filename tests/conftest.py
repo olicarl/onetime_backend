@@ -2,6 +2,7 @@ import os
 # Set DB URL for tests to localhost:5433 (host port for db)
 # We must do this before importing app.config or app.database
 os.environ["DATABASE_URL"] = "postgresql://user:password@localhost:5433/onetime"
+os.environ["INVOICES_DIR"] = "/tmp/onetime_test_invoices"
 
 import pytest
 from starlette.testclient import TestClient
@@ -30,14 +31,19 @@ def db_session(db_engine):
     transaction.rollback()
     connection.close()
 
+_global_client = TestClient(app)
+
 @pytest.fixture(scope="function")
 def client(db_session):
-    # Override the get_db dependency
-    from app.routers.admin import get_db
-    app.dependency_overrides[get_db] = lambda: db_session
+    # Override the get_db dependency for admin and billing
+    from app.routers.admin import get_db as admin_get_db
+    from app.database import get_db as app_get_db
+    from app.routers.billing import get_db as billing_get_db
+    app.dependency_overrides[admin_get_db] = lambda: db_session
+    app.dependency_overrides[app_get_db] = lambda: db_session
+    app.dependency_overrides[billing_get_db] = lambda: db_session
     
-    with TestClient(app) as c:
-        yield c
+    yield _global_client
     
     app.dependency_overrides.clear()
 

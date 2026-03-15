@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from app.models import BillingSettings, Invoice, ChargingSession, Renter, BillingPeriodicity
 from qrbill.bill import QRBill
 
-INVOICES_DIR = "/data/invoices"
+INVOICES_DIR = os.getenv("INVOICES_DIR", "/data/invoices")
 
 def ensure_invoices_dir():
     if not os.path.exists(INVOICES_DIR):

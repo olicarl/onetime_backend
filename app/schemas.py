@@ -128,6 +128,7 @@ class RenterOut(BaseModel):
     contact_email: str
     phone_number: Optional[str] = None
     is_active: bool
+    prepaid_balance_kwh: float = 0.0
     created_at: datetime
 
     class Config:

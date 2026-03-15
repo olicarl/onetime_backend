@@ -31,6 +31,14 @@ class BillingPeriodicity(str, enum.Enum):
     HalfYearly = "HalfYearly"
     Yearly = "Yearly"
 
+class BillingMode(str, enum.Enum):
+    Postpaid = "Postpaid"
+    Prepaid = "Prepaid"
+
+class PrepaidTransactionType(str, enum.Enum):
+    TopUp = "TopUp"
+    Deduction = "Deduction"
+
 # Models
 
 class User(Base):
@@ -53,9 +61,11 @@ class Renter(Base):
     phone_number = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    prepaid_balance_kwh = Column(Float, default=0.0, nullable=False)
 
     parking_spots = relationship("ParkingSpot", back_populates="renter")
     authorization_tokens = relationship("AuthorizationToken", back_populates="renter")
+    prepaid_transactions = relationship("PrepaidTransaction", back_populates="renter", cascade="all, delete-orphan")
 
 
 class ParkingSpot(Base):
@@ -130,6 +140,7 @@ class ChargingSession(Base):
     token_rel = relationship("AuthorizationToken", back_populates="sessions")
     meter_readings = relationship("MeterReading", back_populates="session", cascade="all, delete-orphan")
     invoice = relationship("Invoice", back_populates="sessions")
+    prepaid_transactions = relationship("PrepaidTransaction", back_populates="session")
 
 
 class StationConnector(Base):
@@ -246,6 +257,7 @@ class BillingSettings(Base):
     address = Column(String, nullable=False)
     periodicity = Column(Enum(BillingPeriodicity), default=BillingPeriodicity.Monthly)
     price_per_kwh = Column(Float, nullable=False, default=0.0)
+    billing_mode = Column(Enum(BillingMode), default=BillingMode.Postpaid, nullable=False)
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -261,4 +273,17 @@ class Invoice(Base):
 
     renter = relationship("Renter")
     sessions = relationship("ChargingSession", back_populates="invoice")
+
+class PrepaidTransaction(Base):
+    __tablename__ = "prepaid_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    renter_id = Column(Integer, ForeignKey("renters.id"), nullable=False)
+    transaction_id = Column(Integer, ForeignKey("charging_sessions.transaction_id"), nullable=True)
+    amount_kwh = Column(Float, nullable=False)
+    type = Column(Enum(PrepaidTransactionType), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    renter = relationship("Renter", back_populates="prepaid_transactions")
+    session = relationship("ChargingSession", back_populates="prepaid_transactions")
 

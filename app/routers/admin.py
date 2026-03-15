@@ -6,6 +6,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
+from app.gateway.connection_manager import manager
+from ocpp.v16.enums import RemoteStartStopStatus
+from app.config import logger
+
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 from app.schemas import (
@@ -312,6 +316,33 @@ def delete_charger(charger_id: str, db: Session = Depends(get_db)):
     db.delete(db_charger)
     db.commit()
     return {"message": "Charger deleted"}
+
+class RemoteStopRequest(BaseModel):
+    transaction_id: int
+
+@router.post("/chargers/{charger_id}/remote-stop")
+async def remote_stop_session(charger_id: str, req: RemoteStopRequest, db: Session = Depends(get_db)):
+    db_charger = db.query(ChargingStation).filter(ChargingStation.id == charger_id).first()
+    if not db_charger:
+        raise HTTPException(status_code=404, detail="Charger not found")
+        
+    websocket = manager.get_connection(charger_id)
+    if not websocket or not hasattr(websocket, 'charge_point'):
+        raise HTTPException(status_code=400, detail="Charging station is offline or not connected properly")
+        
+    cp = websocket.charge_point
+    
+    try:
+        response = await cp.remote_stop_transaction(transaction_id=req.transaction_id)
+        if response.status == RemoteStartStopStatus.accepted:
+            return {"message": "Remote stop command accepted"}
+        else:
+            raise HTTPException(status_code=400, detail=f"Remote stop rejected: {response.status}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remote stop transaction {req.transaction_id} on {charger_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to communicate with the charging station")
 
 # Session details (Graph data)
 
