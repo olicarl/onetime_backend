@@ -5,8 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.models import BillingSettings, Invoice, ChargingSession, Renter, BillingPeriodicity
-from swiss_qr_bill import QRBill
-from swiss_qr_bill import generate_qr_bill
+from qrbill.bill import QRBill
 
 INVOICES_DIR = "/data/invoices"
 
@@ -26,8 +25,6 @@ def generate_invoice_pdf(invoice: Invoice, settings: BillingSettings) -> str:
     # Simple invoice details (In a real scenario, you'd use a templating engine like Jinja + Weasyprint for the full page, 
     # but here we generate the QR bill part)
     
-    # We use swiss-qr-bill to generate the payment slip
-    # The library expects string formatted amounts
     qr_bill = QRBill(
         account=settings.iban,
         creditor={
@@ -44,12 +41,11 @@ def generate_invoice_pdf(invoice: Invoice, settings: BillingSettings) -> str:
         },
         amount=str(round(invoice.amount_due, 2)),
         currency="CHF",
-        reference="000000000000000000000000000", # Example reference, should be generated properly if using QR-Iban
         additional_information=f"Invoice {invoice.id} for charging sessions",
     )
     
     # Generate SVG
-    generate_qr_bill(qr_bill, filepath)
+    qr_bill.as_svg(filepath)
     
     # Convert SVG to PDF using svglib and reportlab
     try:
@@ -124,7 +120,7 @@ def get_billing_settings(db: Session) -> BillingSettings:
     if not settings:
         settings = BillingSettings(
             company_name="My Parking Garage",
-            iban="CH9300000000000000000",
+            iban="CH6209000000000000000",
             address="Parking Street 1, 1000 City",
             periodicity=BillingPeriodicity.Monthly,
             price_per_kwh=0.30
