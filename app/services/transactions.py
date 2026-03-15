@@ -211,7 +211,8 @@ class TransactionService:
              for mv in meter_values:
                  sampled_values = mv.get("sampled_value", [])
                  for sv in sampled_values:
-                     if sv.get("measurand", "Energy.Active.Import.Register") == "Energy.Active.Import.Register":
+                     # Only take the total energy reading (the one WITHOUT a phase key)
+                     if sv.get("measurand", "Energy.Active.Import.Register") == "Energy.Active.Import.Register" and "phase" not in sv:
                          val = sv.get("value")
                          if val is not None:
                              try:
