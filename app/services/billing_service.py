@@ -51,13 +51,86 @@ def generate_invoice_pdf(invoice: Invoice, settings: BillingSettings) -> str:
     try:
         from svglib.svglib import svg2rlg
         from reportlab.graphics import renderPDF
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Table, TableStyle
+        from reportlab.lib import colors
+        
+        width, height = A4
+        c = canvas.Canvas(pdf_filepath, pagesize=A4)
+        
+        # Draw header / Title
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(20*mm, height - 20*mm, "Invoice")
+        
+        c.setFont("Helvetica", 10)
+        c.drawString(20*mm, height - 30*mm, f"Invoice #: {invoice.id}")
+        c.drawString(20*mm, height - 35*mm, f"Period: {invoice.period_start.strftime('%d.%m.%Y')} to {invoice.period_end.strftime('%d.%m.%Y')}")
+        
+        # Company Info
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(120*mm, height - 20*mm, settings.company_name)
+        c.setFont("Helvetica", 10)
+        c.drawString(120*mm, height - 25*mm, settings.address)
+        if settings.iban:
+            c.drawString(120*mm, height - 30*mm, f"IBAN: {settings.iban}")
+        
+        # Debtor Info
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(20*mm, height - 50*mm, "Bill To:")
+        c.setFont("Helvetica", 10)
+        c.drawString(20*mm, height - 55*mm, invoice.renter.name)
+        
+        # Draw Sessions Table
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(20*mm, height - 75*mm, "Charging Sessions")
+        
+        data = [["Start Time", "End Time", "Energy (kWh)", "Cost (CHF)"]]
+        for session in invoice.sessions:
+            start_str = session.start_time.strftime('%d.%m.%Y %H:%M')
+            end_str = session.end_time.strftime('%d.%m.%Y %H:%M') if session.end_time else "N/A"
+            kwh = round(session.total_energy_kwh or 0, 2)
+            cost = round(kwh * settings.price_per_kwh, 2)
+            data.append([start_str, end_str, f"{kwh:.2f}", f"{cost:.2f}"])
+            
+        # Total row
+        data.append(["", "", "Total Amount Due:", f"{round(invoice.amount_due, 2):.2f} CHF"])
+        
+        # Create table
+        table = Table(data, colWidths=[45*mm, 45*mm, 35*mm, 35*mm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (3, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor("#e5e7eb")),
+            ('FONTNAME', (2, -1), (3, -1), 'Helvetica-Bold'),
+            ('LINEABOVE', (2, -1), (3, -1), 1, colors.black),
+        ]))
+        
+        w, h = table.wrapOn(c, width, height)
+        # Position it below the "Charging Sessions" title
+        table.drawOn(c, 20*mm, height - 80*mm - h)
+        
+        # Load SVG
         drawing = svg2rlg(filepath)
-        renderPDF.drawToFile(drawing, pdf_filepath)
+        # Draw SVG at bottom left (0, 0)
+        # The QR Bill is 210mm x 105mm, exactly the width of A4 and the bottom 1/3 of the page
+        renderPDF.draw(drawing, c, 0, 0)
+        
+        c.save()
+        
         # Optionally delete the svg
         if os.path.exists(filepath):
             os.remove(filepath)
         return pdf_filepath
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error converting SVG to PDF: {e}")
         return filepath # Return SVG path fallback
 

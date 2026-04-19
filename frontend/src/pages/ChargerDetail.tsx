@@ -435,10 +435,10 @@ export default function ChargerDetail() {
                                             onClick={() => openSessionModal(s)}
                                         >
                                             <TableCell className="text-xs whitespace-nowrap">
-                                                {parseServerDate(s.start_time)?.toLocaleString()}
+                                                {parseServerDate(s.start_time)?.toLocaleString("de-CH")}
                                             </TableCell>
                                             <TableCell className="text-xs whitespace-nowrap">
-                                                {s.end_time ? parseServerDate(s.end_time)?.toLocaleString() : "-"}
+                                                {s.end_time ? parseServerDate(s.end_time)?.toLocaleString("de-CH") : "-"}
                                             </TableCell>
                                             <TableCell className="text-xs whitespace-nowrap">
                                                 {formatDuration(s.start_time, s.end_time)}
@@ -499,7 +499,7 @@ export default function ChargerDetail() {
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="timestamp"
-                                            tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString() || ""}
+                                            tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString("de-CH") || ""}
                                             stroke="#888888"
                                             fontSize={12}
                                         />
@@ -515,12 +515,12 @@ export default function ChargerDetail() {
                                             />
                                         ))}
                                         <Tooltip
-                                            labelFormatter={(str: string) => parseServerDate(str)?.toLocaleString() || ""}
+                                            labelFormatter={(str: string) => parseServerDate(str)?.toLocaleString("de-CH") || ""}
                                             content={({ active, payload, label }: { active?: boolean, payload?: any[], label?: string }) => {
                                                 if (active && payload && payload.length) {
                                                     return (
                                                         <div className="bg-white border rounded p-2 shadow-sm text-sm dark:bg-gray-800 dark:border-gray-700">
-                                                            <p className="font-semibold mb-1">{label ? parseServerDate(label)?.toLocaleString() : ''}</p>
+                                                            <p className="font-semibold mb-1">{label ? parseServerDate(label)?.toLocaleString("de-CH") : ''}</p>
                                                             {payload.map((entry: any, index: number) => (
                                                                 <div key={index} className="flex items-center gap-2" style={{ color: entry.color }}>
                                                                     <span>{entry.name}:</span>
@@ -534,7 +534,7 @@ export default function ChargerDetail() {
                                             }}
                                         />
                                         <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: 'pointer' }} />
-                                        <Brush dataKey="timestamp" height={30} stroke="#8884d8" tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString() || ""} />
+                                        <Brush dataKey="timestamp" height={30} stroke="#8884d8" tickFormatter={(str: string) => parseServerDate(str)?.toLocaleTimeString("de-CH") || ""} />
                                         
                                         {Array.from(chartDataMemo.seriesUnitMap.entries()).map(([key, unit], index) => {
                                             const colors = ["#2563eb", "#dc2626", "#16a34a", "#ca8a04", "#9333ea", "#0891b2"];
@@ -592,7 +592,7 @@ export default function ChargerDetail() {
                                     {logs.map(log => (
                                         <TableRow key={log.id}>
                                             <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
-                                                {parseServerDate(log.timestamp)?.toLocaleTimeString()}
+                                                {parseServerDate(log.timestamp)?.toLocaleTimeString("de-CH")}
                                             </TableCell>
                                             <TableCell>
                                                 {log.direction === "Incoming" ? (

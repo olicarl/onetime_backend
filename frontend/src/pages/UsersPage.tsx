@@ -237,7 +237,7 @@ export default function UsersPage() {
                                                     <span className="text-red-500">Inactive</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                                            <TableCell>{new Date(user.created_at).toLocaleDateString("de-CH")}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button
                                                     variant="ghost"

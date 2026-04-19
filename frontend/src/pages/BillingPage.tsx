@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Download, FileText, CheckCircle2, PlusCircle, History } from "lucide-react";
+import { Loader2, Download, FileText, CheckCircle2, PlusCircle, History, Trash2, Eye } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -43,6 +43,18 @@ interface Invoice {
     created_at: string;
 }
 
+interface SessionInvoice {
+    id: number;
+    transaction_id: number;
+    start_time: string;
+    end_time: string | null;
+    total_energy_kwh: number | null;
+}
+
+interface InvoiceDetails extends Invoice {
+    sessions: SessionInvoice[];
+}
+
 export default function BillingPage() {
     const [loading, setLoading] = useState(true);
     
@@ -68,6 +80,15 @@ export default function BillingPage() {
     const [selectedRenterForHistory, setSelectedRenterForHistory] = useState<Renter | null>(null);
     const [prepaidHistory, setPrepaidHistory] = useState<any[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+
+    const [viewInvoiceModalOpen, setViewInvoiceModalOpen] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetails | null>(null);
+    const [viewLoading, setViewLoading] = useState(false);
+    
+    // Deletion confirmation state
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -105,6 +126,42 @@ export default function BillingPage() {
 
     const handlePreviewPDF = (invoiceId: number) => {
         window.open(`/api/billing/invoices/${invoiceId}/pdf`, '_blank');
+    };
+
+    const handleViewInvoice = async (invoice: Invoice) => {
+        setViewInvoiceModalOpen(true);
+        setViewLoading(true);
+        try {
+            const res = await axios.get(`/api/billing/invoices/${invoice.id}/details`);
+            setSelectedInvoice(res.data);
+        } catch (error) {
+            console.error("Failed to load invoice details", error);
+            alert("Failed to load invoice details");
+            setViewInvoiceModalOpen(false);
+        } finally {
+            setViewLoading(false);
+        }
+    };
+
+    const confirmDeleteInvoice = (invoiceId: number) => {
+        setInvoiceToDelete(invoiceId);
+        setDeleteModalOpen(true);
+    };
+
+    const handleDeleteInvoice = async () => {
+        if (!invoiceToDelete) return;
+        setDeleting(true);
+        try {
+            await axios.delete(`/api/billing/invoices/${invoiceToDelete}`);
+            setDeleteModalOpen(false);
+            setInvoiceToDelete(null);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete invoice", error);
+            alert("Failed to delete invoice");
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleGenerateManualInvoice = async () => {
@@ -226,7 +283,7 @@ export default function BillingPage() {
                                             <TableCell className="font-medium">#{inv.id}</TableCell>
                                             <TableCell>{inv.renter_name}</TableCell>
                                             <TableCell>
-                                                {new Date(inv.period_start).toLocaleDateString()} - {new Date(inv.period_end).toLocaleDateString()}
+                                                {new Date(inv.period_start).toLocaleDateString("de-CH")} - {new Date(inv.period_end).toLocaleDateString("de-CH")}
                                             </TableCell>
                                             <TableCell>{inv.amount_due.toFixed(2)}</TableCell>
                                             <TableCell>
@@ -252,10 +309,27 @@ export default function BillingPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
+                                                    title="View Details"
+                                                    onClick={() => handleViewInvoice(inv)}
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
                                                     title="Preview/Download PDF"
                                                     onClick={() => handlePreviewPDF(inv.id)}
                                                 >
                                                     <Download className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Delete Invoice"
+                                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={() => confirmDeleteInvoice(inv.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -430,7 +504,7 @@ export default function BillingPage() {
                                         )}
                                         {prepaidHistory.map((txn, i) => (
                                             <TableRow key={i}>
-                                                <TableCell className="text-sm">{new Date(txn.timestamp).toLocaleString()}</TableCell>
+                                                <TableCell className="text-sm">{new Date(txn.timestamp).toLocaleString("de-CH")}</TableCell>
                                                 <TableCell>
                                                     <span className={`px-2 py-1 text-xs font-semibold rounded ${txn.type === 'TopUp' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
                                                         {txn.type}
@@ -448,6 +522,109 @@ export default function BillingPage() {
                                 </Table>
                             )}
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* View Invoice Modal */}
+                <Dialog open={viewInvoiceModalOpen} onOpenChange={setViewInvoiceModalOpen}>
+                    <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                        <DialogHeader>
+                            <DialogTitle>Invoice Details</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex-1 overflow-auto mt-4">
+                            {viewLoading ? (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                </div>
+                            ) : selectedInvoice ? (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="font-semibold text-muted-foreground block">Invoice #</span>
+                                            <div>{selectedInvoice.id}</div>
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-muted-foreground block">Renter</span>
+                                            <div>{selectedInvoice.renter_name}</div>
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-muted-foreground block">Period</span>
+                                            <div>
+                                                {new Date(selectedInvoice.period_start).toLocaleDateString("de-CH")} - {new Date(selectedInvoice.period_end).toLocaleDateString("de-CH")}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-muted-foreground block">Status</span>
+                                            <div>
+                                                {selectedInvoice.is_paid ? (
+                                                    <span className="inline-flex items-center text-green-600 font-medium">
+                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Paid
+                                                    </span>
+                                                ) : "Unpaid"}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="font-semibold mb-3">Charging Sessions</h4>
+                                        <div className="border rounded-md overflow-hidden">
+                                            <Table>
+                                                <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                                                    <TableRow>
+                                                        <TableHead>Start Time</TableHead>
+                                                        <TableHead>End Time</TableHead>
+                                                        <TableHead className="text-right">Energy (kWh)</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {selectedInvoice.sessions.length === 0 ? (
+                                                        <TableRow>
+                                                            <TableCell colSpan={3} className="text-center text-muted-foreground py-4">No sessions found.</TableCell>
+                                                        </TableRow>
+                                                    ) : (
+                                                        selectedInvoice.sessions.map((s, i) => (
+                                                            <TableRow key={i}>
+                                                                <TableCell>{new Date(s.start_time).toLocaleString("de-CH")}</TableCell>
+                                                                <TableCell>{s.end_time ? new Date(s.end_time).toLocaleString("de-CH") : "N/A"}</TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {s.total_energy_kwh ? s.total_energy_kwh.toFixed(3) : "0.000"}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex justify-end pt-4 border-t">
+                                        <div className="text-right">
+                                            <span className="text-muted-foreground mr-4">Total Amount Due</span>
+                                            <span className="text-xl font-bold">{selectedInvoice.amount_due.toFixed(2)} CHF</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Delete Confirmation Modal */}
+                <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete Invoice</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete this invoice? The associated charging sessions will be marked as unbilled, and the PDF will be deleted. This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setDeleteModalOpen(false)} disabled={deleting}>Cancel</Button>
+                            <Button variant="destructive" onClick={handleDeleteInvoice} disabled={deleting}>
+                                {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Delete
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </main>

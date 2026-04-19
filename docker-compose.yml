@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgresql://user:password@db/onetime
     volumes:
       - .:/code
+      - invoices_data:/data/invoices
     depends_on:
       db:
         condition: service_healthy
@@ -81,3 +82,4 @@ services:
 
 volumes:
   postgres_data:
+  invoices_data:

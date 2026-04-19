@@ -43,6 +43,30 @@ class InvoiceSchema(BaseModel):
     class Config:
         from_attributes = True
 
+class SessionInvoiceSchema(BaseModel):
+    id: int
+    transaction_id: int
+    start_time: datetime
+    end_time: Optional[datetime]
+    total_energy_kwh: Optional[float]
+
+    class Config:
+        from_attributes = True
+
+class InvoiceDetailsSchema(BaseModel):
+    id: int
+    renter_id: int
+    period_start: datetime
+    period_end: datetime
+    amount_due: float
+    is_paid: bool
+    created_at: datetime
+    renter_name: str
+    sessions: List[SessionInvoiceSchema]
+
+    class Config:
+        from_attributes = True
+
 class GenerateInvoiceRequest(BaseModel):
     renter_id: int
     end_date: datetime
@@ -162,6 +186,49 @@ def generate_manual_invoice(req: GenerateInvoiceRequest, db: Session = Depends(g
         return {"message": "Invoice generated successfully", "invoice_id": invoice.id}
     except ValueError as e:
          raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/invoices/{invoice_id}/details", response_model=InvoiceDetailsSchema)
+def get_invoice_details(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    return InvoiceDetailsSchema(
+        id=invoice.id,
+        renter_id=invoice.renter.id,
+        period_start=invoice.period_start,
+        period_end=invoice.period_end,
+        amount_due=invoice.amount_due,
+        is_paid=invoice.is_paid,
+        created_at=invoice.created_at,
+        renter_name=invoice.renter.name if invoice.renter else "Unknown",
+        sessions=[SessionInvoiceSchema.model_validate(s) for s in invoice.sessions]
+    )
+
+@router.delete("/invoices/{invoice_id}")
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Unlink sessions
+    for session in invoice.sessions:
+        session.invoice_id = None
+        
+    # Attempt to delete PDF from disk if exists
+    if invoice.file_path and os.path.exists(invoice.file_path):
+        try:
+            os.remove(invoice.file_path)
+            # also remove svg if it exists
+            svg_path = invoice.file_path.replace(".pdf", ".svg")
+            if os.path.exists(svg_path):
+                os.remove(svg_path)
+        except Exception as e:
+            print(f"Failed to delete invoice file: {e}")
+            
+    db.delete(invoice)
+    db.commit()
+    return {"message": "Invoice deleted successfully"}
 
 @router.post("/invoices/{invoice_id}/mark-paid")
 def mark_invoice_paid(invoice_id: int, db: Session = Depends(get_db)):
